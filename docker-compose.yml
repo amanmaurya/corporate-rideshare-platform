@@ -1,0 +1,78 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database with PostGIS
+  postgres:
+    image: postgis/postgis:15-3.3
+    container_name: rideshare_postgres
+    environment:
+      POSTGRES_DB: rideshare_db
+      POSTGRES_USER: rideshare_user
+      POSTGRES_PASSWORD: rideshare_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql
+    networks:
+      - rideshare_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rideshare_user -d rideshare_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis for caching and real-time data
+  redis:
+    image: redis:7-alpine
+    container_name: rideshare_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - rideshare_network
+
+  # FastAPI Backend
+  backend:
+    build: ./backend
+    container_name: rideshare_backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://rideshare_user:rideshare_password@postgres:5432/rideshare_db
+      - REDIS_URL=redis://redis:6379
+      - SECRET_KEY=your-secret-key-here-change-in-production
+      - ACCESS_TOKEN_EXPIRE_MINUTES=30
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ./backend:/app
+      - ./web-admin:/web-admin
+    networks:
+      - rideshare_network
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+  # NGINX Reverse Proxy (Optional)
+  nginx:
+    image: nginx:alpine
+    container_name: rideshare_nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - backend
+    networks:
+      - rideshare_network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  rideshare_network:
+    driver: bridge
