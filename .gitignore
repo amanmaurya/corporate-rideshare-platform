@@ -10,7 +10,7 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+# lib/  # Commented out - too broad, excludes Flutter source code
 lib64/
 parts/
 sdist/
@@ -62,19 +62,144 @@ mobile/.pub/
 mobile/build/
 mobile/ios/Flutter/flutter_export_environment.sh
 mobile/ios/Flutter/flutter_pods_project_path
+mobile/.metadata
+mobile/.flutter-plugins-dependencies
+mobile/.flutter-plugins
+mobile/.packages
+mobile/.pub-cache/
+mobile/.pub/
+mobile/.dart_tool/
+mobile/build/
+mobile/ios/Flutter/Generated.xcconfig
+mobile/ios/Flutter/flutter_export_environment.sh
+mobile/ios/Flutter/flutter_pods_project_path
+mobile/ios/Pods/
+mobile/ios/Runner.xcworkspace/xcshareddata/
+mobile/ios/Runner.xcworkspace/xcuserdata/
+mobile/ios/Runner.xcodeproj/xcuserdata/
+mobile/ios/Runner.xcodeproj/project.xcworkspace/xcuserdata/
+mobile/android/.gradle/
+mobile/android/local.properties
+mobile/android/key.properties
+mobile/android/app/debug/
+mobile/android/app/profile/
+mobile/android/app/release/
+mobile/android/app/build/
+mobile/android/build/
+mobile/android/gradle/
+mobile/android/gradlew
+mobile/android/gradlew.bat
+mobile/android/local.properties
+mobile/android/key.properties
 
-# Android
-mobile/android/app/debug
-mobile/android/app/profile
-mobile/android/app/release
+# Android (consolidated above)
 
-# Web
+# iOS (consolidated above)
+
+# Web Admin
 web-admin/node_modules/
 web-admin/dist/
+web-admin/.env
+web-admin/.env.local
+web-admin/.env.production
+web-admin/.cache/
+web-admin/logs/
+web-admin/build/
+web-admin/.next/
+web-admin/.nuxt/
+web-admin/.output/
 
 # Docker
 .dockerignore
+docker-compose.override.yml
+
+# Backend
+backend/__pycache__/
+backend/*.pyc
+backend/.env
+backend/.env.local
+backend/.env.production
+backend/logs/
+backend/uploads/
+backend/temp/
+backend/cache/
+backend/.pytest_cache/
+backend/.coverage
+backend/htmlcov/
+backend/migrations/__pycache__/
+backend/alembic/versions/__pycache__/
+
+# Database
+*.db
+*.sqlite3
+backend/data/
+backend/migrations/__pycache__/
+
+# Logs
+*.log
+logs/
+backend/logs/
+mobile/logs/
 
 # Temporary files
 *.tmp
 *.temp
+*.cache
+.cache/
+
+# IDE and Editor
+.vscode/settings.json
+.vscode/launch.json
+.vscode/tasks.json
+.idea/workspace.xml
+.idea/tasks.xml
+*.sublime-project
+*.sublime-workspace
+
+# OS Generated
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# Testing
+.coverage
+.pytest_cache/
+htmlcov/
+.tox/
+.nox/
+.coverage.*
+coverage.xml
+*.cover
+.hypothesis/
+
+# Project Specific
+.env
+.env.local
+.env.production
+.env.staging
+.env.development
+*.env
+secrets/
+secrets.json
+config/secrets.json
+keys/
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Documentation Build
+docs/_build/
+docs/.doctrees/
+docs/api/
+
+# Backup Files
+*.bak
+*.backup
+*.old
+*.orig
