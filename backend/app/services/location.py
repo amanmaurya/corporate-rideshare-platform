@@ -95,5 +95,21 @@ class LocationService:
         nearby_points.sort(key=lambda x: x['distance_km'])
         return nearby_points
 
+    @staticmethod
+    def calculate_fare(distance_km: float, duration_minutes: int = 0, 
+                      base_rate: float = 2.0, distance_rate: float = 1.5, 
+                      time_rate: float = 0.5) -> float:
+        """Calculate fare for a ride"""
+        fare = base_rate + (distance_km * distance_rate) + (duration_minutes * time_rate)
+        return round(fare, 2)
+
+    @staticmethod
+    def calculate_estimated_duration(distance_km: float, 
+                                   average_speed_kmh: float = 30.0) -> int:
+        """Calculate estimated duration for a ride in minutes"""
+        duration_hours = distance_km / average_speed_kmh
+        duration_minutes = int(duration_hours * 60)
+        return duration_minutes
+
 # Initialize global location service
 location_service = LocationService()

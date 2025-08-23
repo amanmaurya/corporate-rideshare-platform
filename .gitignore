@@ -1,0 +1,301 @@
+# ====================================
+# CORPORATE RIDESHARE PLATFORM
+# ====================================
+# This .gitignore file is designed to ignore build artifacts,
+# dependencies, and temporary files while preserving all source code.
+
+# ====================================
+# Python Backend
+# ====================================
+# Virtual environments
+venv/
+ENV/
+env/
+.venv/
+.env.local
+.env.development
+.env.production
+
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Python testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+.hypothesis/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# PEP 582
+__pypackages__/
+
+# ====================================
+# Flutter / Dart Mobile App
+# ====================================
+# Flutter/Dart specific
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+*.lock
+
+# Generated files
+*.log
+*.tmp
+*.swp
+*.iml
+*.ipr
+*.iws
+
+# Flutter web
+**/web/.dart_tool/
+**/web/.firebase/
+
+# ====================================
+# Android (Mobile)
+# ====================================
+**/android/**/gradle-wrapper.jar
+**/android/.gradle/
+**/android/captures/
+**/android/gradlew
+**/android/gradlew.bat
+**/android/local.properties
+**/android/app/key.properties
+**/android/.idea/
+**/android/build/
+**/android/app/build/
+**/android/.gradle/
+**/android/captures/
+**/android/gradlew
+**/android/gradlew.bat
+**/android/local.properties
+**/android/app/key.properties
+**/android/app/debug/
+**/android/app/release/
+**/android/app/profile/
+
+# ====================================
+# iOS / macOS (Mobile)
+# ====================================
+**/ios/Pods/
+**/ios/.symlinks/
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Flutter.podspec
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/ephemeral/
+**/ios/ServiceDefinitions.json
+**/ios/Runner/GeneratedPluginRegistrant.*
+**/ios/build/
+**/ios/Runner.xcworkspace/xcshareddata/
+**/ios/Runner.xcworkspace/xcuserdata/
+
+**/macos/Pods/
+**/macos/.symlinks/
+**/macos/Flutter/ephemeral/
+**/macos/Flutter/GeneratedPluginRegistrant.*
+**/macos/build/
+
+# ====================================
+# Windows / Linux (Mobile)
+# ====================================
+**/windows/Flutter/ephemeral/
+**/windows/build/
+
+**/linux/Flutter/ephemeral/
+**/linux/build/
+
+# ====================================
+# Node.js / Web Admin
+# ====================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+
+# ====================================
+# IDEs and Editors
+# ====================================
+.idea/
+*.iml
+.vscode/
+.history/
+.ionide/
+*.swp
+*.swo
+*~
+
+# ====================================
+# Operating System Files
+# ====================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.tmp
+*.temp
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# ====================================
+# Firebase / Google Services
+# ====================================
+google-services.json
+GoogleService-Info.plist
+firebase-debug.log
+firebase-debug.*.log
+.firebase/
+
+# ====================================
+# Database Files
+# ====================================
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+
+# ====================================
+# Logs and Reports
+# ====================================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+*.lcov
+
+# nyc test coverage
+.nyc_output
+
+# ====================================
+# Environment and Configuration
+# ====================================
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# ====================================
+# Docker
+# ====================================
+.dockerignore
+
+# ====================================
+# Temporary Files
+# ====================================
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+*.bak
+*.backup
+*.orig
+
+# ====================================
+# Archive Files
+# ====================================
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+
+# ====================================
+# Security and Secrets
+# ====================================
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.csr
+*.der
+*.p8
+secrets/
+secrets.json

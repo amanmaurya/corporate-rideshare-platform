@@ -6,6 +6,7 @@ import '../auth/login_screen.dart';
 import '../ride/create_ride_screen.dart';
 import '../ride/my_rides_screen.dart';
 import '../ride/available_rides_screen.dart';
+import '../settings/settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -21,7 +22,7 @@ class _HomeScreenState extends State<HomeScreen> {
     const DashboardTab(),
     const AvailableRidesScreen(),
     const MyRidesScreen(),
-    const ProfileTab(),
+    const SettingsScreen(),
   ];
 
   @override
@@ -48,8 +49,8 @@ class _HomeScreenState extends State<HomeScreen> {
             label: 'My Rides',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.person),
-            label: 'Profile',
+            icon: Icon(Icons.settings),
+            label: 'Settings',
           ),
         ],
       ),

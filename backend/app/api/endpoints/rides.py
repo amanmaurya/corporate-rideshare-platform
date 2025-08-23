@@ -10,6 +10,8 @@ from app.schemas.ride import RideCreate, RideUpdate, RideResponse, RideRequestCr
 from app.services.auth import verify_token
 from app.services.ride_matching import RideMatchingService
 from app.services.location import location_service
+from app.services.notification_service import notification_service
+from app.services.websocket_service import websocket_service
 
 router = APIRouter()
 security = HTTPBearer()
@@ -65,6 +67,22 @@ async def create_ride(ride: RideCreate, current_user: User = Depends(get_current
     db.add(db_ride)
     db.commit()
     db.refresh(db_ride)
+
+    # Send real-time update via WebSocket
+    try:
+        await websocket_service.manager.broadcast_ride_update({
+            "id": db_ride.id,
+            "type": "ride_created",
+            "pickup_location": db_ride.pickup_location,
+            "destination": db_ride.destination,
+            "scheduled_time": db_ride.scheduled_time.isoformat() if db_ride.scheduled_time else None,
+            "max_passengers": db_ride.max_passengers,
+            "current_passengers": db_ride.current_passengers,
+            "status": db_ride.status
+        }, current_user.company_id, exclude_user=current_user.id)
+    except Exception as e:
+        # Log error but don't fail the ride creation
+        print(f"WebSocket broadcast failed: {e}")
 
     return db_ride
 
@@ -130,6 +148,17 @@ async def update_ride(ride_id: str, ride_update: RideUpdate,
     db.commit()
     db.refresh(ride)
 
+    # Send real-time update
+    try:
+        await websocket_service.manager.broadcast_ride_update({
+            "id": ride.id,
+            "type": "ride_updated",
+            "status": ride.status,
+            "updated_at": ride.updated_at.isoformat() if ride.updated_at else None
+        }, current_user.company_id)
+    except Exception as e:
+        print(f"WebSocket broadcast failed: {e}")
+
     return ride
 
 @router.delete("/{ride_id}")
@@ -149,6 +178,15 @@ async def delete_ride(ride_id: str, current_user: User = Depends(get_current_use
 
     db.delete(ride)
     db.commit()
+
+    # Send real-time update
+    try:
+        await websocket_service.manager.broadcast_ride_update({
+            "id": ride_id,
+            "type": "ride_deleted"
+        }, current_user.company_id)
+    except Exception as e:
+        print(f"WebSocket broadcast failed: {e}")
 
     return {"message": "Ride deleted successfully"}
 
@@ -223,6 +261,31 @@ async def request_ride(ride_id: str, request_data: RideRequestCreate,
     db.commit()
     db.refresh(ride_request)
 
+    # Send notification to ride creator
+    try:
+        notification_service.notify_ride_request(
+            ride_id=ride_id,
+            rider_id=current_user.id,
+            driver_id=ride.rider_id,
+            company_id=current_user.company_id,
+            pickup_location=ride.pickup_location,
+            destination=ride.destination
+        )
+    except Exception as e:
+        print(f"Notification failed: {e}")
+
+    # Send real-time update
+    try:
+        await websocket_service.manager.broadcast_ride_request({
+            "ride_id": ride_id,
+            "user_id": current_user.id,
+            "user_name": current_user.name,
+            "message": request_data.message,
+            "timestamp": datetime.utcnow().isoformat()
+        }, current_user.company_id)
+    except Exception as e:
+        print(f"WebSocket broadcast failed: {e}")
+
     return ride_request
 
 @router.post("/{ride_id}/accept")
@@ -257,6 +320,18 @@ async def accept_ride_request(ride_id: str, request_id: str,
     ride.current_passengers += 1
     db.commit()
 
+    # Send notification to requester
+    try:
+        notification_service.notify_ride_accepted(
+            ride_id=ride_id,
+            rider_id=ride_request.user_id,
+            driver_id=current_user.id,
+            company_id=current_user.company_id,
+            driver_name=current_user.name
+        )
+    except Exception as e:
+        print(f"Notification failed: {e}")
+
     return {"message": "Ride request accepted"}
 
 @router.post("/{ride_id}/start")
@@ -283,6 +358,24 @@ async def start_ride(ride_id: str, current_user: User = Depends(get_current_user
     ride.status = "in_progress"
     ride.actual_start_time = datetime.utcnow()
     db.commit()
+
+    # Send notification to passengers
+    try:
+        # Get all accepted ride requests
+        accepted_requests = db.query(RideRequest).filter(
+            RideRequest.ride_id == ride_id,
+            RideRequest.status == "accepted"
+        ).all()
+        
+        for request in accepted_requests:
+            notification_service.notify_ride_started(
+                ride_id=ride_id,
+                rider_id=request.user_id,
+                driver_id=current_user.id,
+                company_id=current_user.company_id
+            )
+    except Exception as e:
+        print(f"Notification failed: {e}")
 
     return {"message": "Ride started successfully"}
 
@@ -318,6 +411,24 @@ async def complete_ride(ride_id: str, current_user: User = Depends(get_current_u
     ride.actual_fare = location_service.calculate_fare(actual_distance)
     
     db.commit()
+
+    # Send notification to passengers
+    try:
+        accepted_requests = db.query(RideRequest).filter(
+            RideRequest.ride_id == ride_id,
+            RideRequest.status == "accepted"
+        ).all()
+        
+        for request in accepted_requests:
+            notification_service.notify_ride_completed(
+                ride_id=ride_id,
+                rider_id=request.user_id,
+                driver_id=current_user.id,
+                company_id=current_user.company_id,
+                fare=ride.actual_fare
+            )
+    except Exception as e:
+        print(f"Notification failed: {e}")
 
     return {"message": "Ride completed successfully", "fare": ride.actual_fare}
 
@@ -387,5 +498,20 @@ async def update_ride_location(ride_id: str,
     current_user.longitude = longitude
     current_user.updated_at = datetime.utcnow()
     db.commit()
+
+    # Send real-time location update
+    try:
+        await websocket_service.manager.broadcast_location_update(
+            current_user.id,
+            {
+                "ride_id": ride_id,
+                "latitude": latitude,
+                "longitude": longitude,
+                "timestamp": datetime.utcnow().isoformat()
+            },
+            current_user.company_id
+        )
+    except Exception as e:
+        print(f"WebSocket broadcast failed: {e}")
 
     return {"message": "Location updated successfully"}

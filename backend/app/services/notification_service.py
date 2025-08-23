@@ -1,260 +1,329 @@
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from datetime import datetime
 from enum import Enum
-import json
+from dataclasses import dataclass
+from app.services.websocket_service import websocket_service
 
 logger = logging.getLogger(__name__)
 
-class NotificationType(Enum):
-    """Types of notifications"""
+class NotificationType(str, Enum):
     RIDE_REQUEST = "ride_request"
     RIDE_ACCEPTED = "ride_accepted"
     RIDE_DECLINED = "ride_declined"
     RIDE_STARTED = "ride_started"
     RIDE_COMPLETED = "ride_completed"
-    DRIVER_ARRIVING = "driver_arriving"
-    LOCATION_UPDATE = "location_update"
-    PAYMENT_RECEIVED = "payment_received"
     RIDE_CANCELLED = "ride_cancelled"
+    LOCATION_UPDATE = "location_update"
+    PAYMENT_PROCESSED = "payment_processed"
+    PAYMENT_FAILED = "payment_failed"
+    SYSTEM_MESSAGE = "system_message"
+    REMINDER = "reminder"
 
-class NotificationPriority(Enum):
-    """Notification priority levels"""
+class NotificationPriority(str, Enum):
     LOW = "low"
-    NORMAL = "normal"
+    MEDIUM = "medium"
     HIGH = "high"
     URGENT = "urgent"
 
+@dataclass
+class NotificationData:
+    user_id: str
+    company_id: str
+    notification_type: NotificationType
+    title: str
+    message: str
+    data: Optional[Dict[str, Any]] = None
+    priority: NotificationPriority = NotificationPriority.MEDIUM
+    scheduled_at: Optional[datetime] = None
+    expires_at: Optional[datetime] = None
+
 class NotificationService:
-    """Service for handling notifications"""
+    """Service for managing notifications and push messages"""
     
     def __init__(self):
-        self.notifications = {}  # In-memory storage for demo
-        self.push_tokens = {}    # Store push notification tokens
+        self.notifications: Dict[str, Dict] = {}
+        self.user_preferences: Dict[str, Dict] = {}
         
-    async def send_notification(self, 
-                               user_id: str, 
-                               notification_type: NotificationType,
-                               title: str, 
-                               message: str, 
-                               data: Dict = None,
-                               priority: NotificationPriority = NotificationPriority.NORMAL) -> bool:
-        """
-        Send a notification to a user
-        Returns True if successful, False otherwise
-        """
-        try:
-            notification = {
-                "id": f"notif_{datetime.utcnow().timestamp()}",
-                "user_id": user_id,
-                "type": notification_type.value,
-                "title": title,
-                "message": message,
-                "data": data or {},
-                "priority": priority.value,
-                "timestamp": datetime.utcnow().isoformat(),
-                "read": False
-            }
-            
-            # Store notification
-            if user_id not in self.notifications:
-                self.notifications[user_id] = []
-            self.notifications[user_id].append(notification)
-            
-            # Send push notification if token exists
-            await self.send_push_notification(user_id, notification)
-            
-            # Send in-app notification via WebSocket
-            await self.send_websocket_notification(user_id, notification)
-            
-            logger.info(f"Notification sent to user {user_id}: {title}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Failed to send notification to user {user_id}: {e}")
-            return False
-    
-    async def send_push_notification(self, user_id: str, notification: Dict) -> bool:
-        """Send push notification to user's device"""
-        if user_id in self.push_tokens:
-            token = self.push_tokens[user_id]
-            
-            # This would integrate with FCM, APNS, or other push services
-            # For now, just log the attempt
-            logger.info(f"Push notification would be sent to token {token}: {notification['title']}")
-            
-            # In production, you would:
-            # 1. Send to FCM for Android
-            # 2. Send to APNS for iOS
-            # 3. Handle delivery receipts
-            # 4. Retry failed deliveries
-            
-            return True
-        return False
-    
-    async def send_websocket_notification(self, user_id: str, notification: Dict) -> bool:
-        """Send notification via WebSocket for real-time delivery"""
-        try:
-            from app.services.websocket_service import manager
-            
-            await manager.send_personal_message({
-                "type": "notification",
-                "data": notification
-            }, user_id)
-            
-            return True
-        except Exception as e:
-            logger.error(f"Failed to send WebSocket notification: {e}")
-            return False
-    
-    async def send_ride_notification(self, 
-                                   user_id: str, 
-                                   ride_id: str, 
-                                   notification_type: NotificationType,
-                                   ride_data: Dict = None) -> bool:
-        """Send ride-specific notifications"""
+    def create_notification(self, notification_data: NotificationData) -> str:
+        """Create a new notification"""
+        notification_id = f"notif_{len(self.notifications) + 1}"
         
-        notifications = {
-            NotificationType.RIDE_REQUEST: {
-                "title": "New Ride Request",
-                "message": "You have a new ride request",
-                "priority": NotificationPriority.HIGH
-            },
-            NotificationType.RIDE_ACCEPTED: {
-                "title": "Ride Accepted!",
-                "message": "Your ride request has been accepted",
-                "priority": NotificationPriority.HIGH
-            },
-            NotificationType.RIDE_DECLINED: {
-                "title": "Ride Declined",
-                "message": "Your ride request was declined",
-                "priority": NotificationPriority.NORMAL
-            },
-            NotificationType.RIDE_STARTED: {
-                "title": "Ride Started",
-                "message": "Your ride is now in progress",
-                "priority": NotificationPriority.HIGH
-            },
-            NotificationType.RIDE_COMPLETED: {
-                "title": "Ride Completed",
-                "message": "Your ride has been completed",
-                "priority": NotificationPriority.NORMAL
-            },
-            NotificationType.DRIVER_ARRIVING: {
-                "title": "Driver Arriving",
-                "message": "Your driver is arriving soon",
-                "priority": NotificationPriority.HIGH
-            },
-            NotificationType.RIDE_CANCELLED: {
-                "title": "Ride Cancelled",
-                "message": "Your ride has been cancelled",
-                "priority": NotificationPriority.NORMAL
-            }
+        notification = {
+            "id": notification_id,
+            "user_id": notification_data.user_id,
+            "company_id": notification_data.company_id,
+            "type": notification_data.notification_type.value,
+            "title": notification_data.title,
+            "message": notification_data.message,
+            "data": notification_data.data or {},
+            "priority": notification_data.priority.value,
+            "is_read": False,
+            "created_at": datetime.utcnow(),
+            "scheduled_at": notification_data.scheduled_at,
+            "expires_at": notification_data.expires_at
         }
         
-        if notification_type in notifications:
-            notif_info = notifications[notification_type]
-            
-            return await self.send_notification(
-                user_id=user_id,
-                notification_type=notification_type,
-                title=notif_info["title"],
-                message=notif_info["message"],
-                data={"ride_id": ride_id, **(ride_data or {})},
-                priority=notif_info["priority"]
-            )
+        self.notifications[notification_id] = notification
         
+        # Send real-time notification via WebSocket
+        self.send_realtime_notification(notification_data.user_id, notification)
+        
+        logger.info(f"Notification created: {notification_id} for user {notification_data.user_id}")
+        return notification_id
+    
+    def send_realtime_notification(self, user_id: str, notification: Dict):
+        """Send notification via WebSocket in real-time"""
+        try:
+            websocket_service.manager.send_notification(user_id, {
+                "id": notification["id"],
+                "type": notification["type"],
+                "title": notification["title"],
+                "message": notification["message"],
+                "data": notification["data"],
+                "priority": notification["priority"],
+                "timestamp": notification["created_at"].isoformat()
+            })
+        except Exception as e:
+            logger.error(f"Failed to send real-time notification: {e}")
+    
+    def notify_ride_request(self, ride_id: str, rider_id: str, driver_id: str, 
+                           company_id: str, pickup_location: str, destination: str):
+        """Notify driver about a ride request"""
+        notification_data = NotificationData(
+            user_id=driver_id,
+            company_id=company_id,
+            notification_type=NotificationType.RIDE_REQUEST,
+            title="New Ride Request",
+            message=f"Ride request from {pickup_location} to {destination}",
+            data={
+                "ride_id": ride_id,
+                "rider_id": rider_id,
+                "pickup_location": pickup_location,
+                "destination": destination,
+                "action_required": True
+            },
+            priority=NotificationPriority.HIGH
+        )
+        
+        return self.create_notification(notification_data)
+    
+    def notify_ride_accepted(self, ride_id: str, rider_id: str, driver_id: str, 
+                            company_id: str, driver_name: str):
+        """Notify rider that their ride request was accepted"""
+        notification_data = NotificationData(
+            user_id=rider_id,
+            company_id=company_id,
+            notification_type=NotificationType.RIDE_ACCEPTED,
+            title="Ride Accepted!",
+            message=f"Your ride has been accepted by {driver_name}",
+            data={
+                "ride_id": ride_id,
+                "driver_id": driver_id,
+                "driver_name": driver_name,
+                "status": "accepted"
+            },
+            priority=NotificationPriority.HIGH
+        )
+        
+        return self.create_notification(notification_data)
+    
+    def notify_ride_started(self, ride_id: str, rider_id: str, driver_id: str, 
+                           company_id: str):
+        """Notify rider that their ride has started"""
+        notification_data = NotificationData(
+            user_id=rider_id,
+            company_id=company_id,
+            notification_type=NotificationType.RIDE_STARTED,
+            title="Ride Started",
+            message="Your ride has started. Track your journey in real-time.",
+            data={
+                "ride_id": ride_id,
+                "driver_id": driver_id,
+                "status": "in_progress"
+            },
+            priority=NotificationPriority.MEDIUM
+        )
+        
+        return self.create_notification(notification_data)
+    
+    def notify_ride_completed(self, ride_id: str, rider_id: str, driver_id: str, 
+                             company_id: str, fare: float):
+        """Notify rider that their ride has completed"""
+        notification_data = NotificationData(
+            user_id=rider_id,
+            company_id=company_id,
+            notification_type=NotificationType.RIDE_COMPLETED,
+            title="Ride Completed",
+            message=f"Your ride has been completed. Fare: ${fare:.2f}",
+            data={
+                "ride_id": ride_id,
+                "driver_id": driver_id,
+                "fare": fare,
+                "status": "completed",
+                "action_required": True
+            },
+            priority=NotificationPriority.MEDIUM
+        )
+        
+        return self.create_notification(notification_data)
+    
+    def notify_payment_processed(self, user_id: str, company_id: str, 
+                                payment_id: str, amount: float, ride_id: Optional[str] = None):
+        """Notify user about successful payment processing"""
+        title = "Payment Processed"
+        message = f"Payment of ${amount:.2f} has been processed successfully"
+        
+        if ride_id:
+            title = "Ride Payment Processed"
+            message = f"Ride payment of ${amount:.2f} has been processed"
+        
+        notification_data = NotificationData(
+            user_id=user_id,
+            company_id=company_id,
+            notification_type=NotificationType.PAYMENT_PROCESSED,
+            title=title,
+            message=message,
+            data={
+                "payment_id": payment_id,
+                "amount": amount,
+                "ride_id": ride_id,
+                "status": "completed"
+            },
+            priority=NotificationPriority.MEDIUM
+        )
+        
+        return self.create_notification(notification_data)
+    
+    def notify_payment_failed(self, user_id: str, company_id: str, 
+                             payment_id: str, amount: float, error_message: str):
+        """Notify user about failed payment"""
+        notification_data = NotificationData(
+            user_id=user_id,
+            company_id=company_id,
+            notification_type=NotificationType.PAYMENT_FAILED,
+            title="Payment Failed",
+            message=f"Payment of ${amount:.2f} failed: {error_message}",
+            data={
+                "payment_id": payment_id,
+                "amount": amount,
+                "error_message": error_message,
+                "action_required": True
+            },
+            priority=NotificationPriority.HIGH
+        )
+        
+        return self.create_notification(notification_data)
+    
+    def notify_location_update(self, user_id: str, company_id: str, 
+                              ride_id: str, driver_name: str, 
+                              estimated_arrival: Optional[int] = None):
+        """Notify rider about driver location update"""
+        message = f"{driver_name} is on the way"
+        if estimated_arrival:
+            message += f". Estimated arrival: {estimated_arrival} minutes"
+        
+        notification_data = NotificationData(
+            user_id=user_id,
+            company_id=company_id,
+            notification_type=NotificationType.LOCATION_UPDATE,
+            title="Driver Update",
+            message=message,
+            data={
+                "ride_id": ride_id,
+                "driver_name": driver_name,
+                "estimated_arrival": estimated_arrival
+            },
+            priority=NotificationPriority.LOW
+        )
+        
+        return self.create_notification(notification_data)
+    
+    def send_system_message(self, user_id: str, company_id: str, 
+                           title: str, message: str, priority: NotificationPriority = NotificationPriority.MEDIUM):
+        """Send system message to user"""
+        notification_data = NotificationData(
+            user_id=user_id,
+            company_id=company_id,
+            notification_type=NotificationType.SYSTEM_MESSAGE,
+            title=title,
+            message=message,
+            priority=priority
+        )
+        
+        return self.create_notification(notification_data)
+    
+    def send_reminder(self, user_id: str, company_id: str, 
+                      title: str, message: str, scheduled_at: datetime):
+        """Schedule a reminder notification"""
+        notification_data = NotificationData(
+            user_id=user_id,
+            company_id=company_id,
+            notification_type=NotificationType.REMINDER,
+            title=title,
+            message=message,
+            scheduled_at=scheduled_at,
+            priority=NotificationPriority.MEDIUM
+        )
+        
+        return self.create_notification(notification_data)
+    
+    def get_user_notifications(self, user_id: str, limit: int = 50, unread_only: bool = False) -> List[Dict]:
+        """Get notifications for a specific user"""
+        user_notifications = [
+            notif for notif in self.notifications.values() 
+            if notif["user_id"] == user_id
+        ]
+        
+        if unread_only:
+            user_notifications = [notif for notif in user_notifications if not notif["is_read"]]
+        
+        # Sort by creation date (newest first)
+        user_notifications.sort(key=lambda x: x["created_at"], reverse=True)
+        
+        return user_notifications[:limit]
+    
+    def mark_notification_read(self, notification_id: str, user_id: str) -> bool:
+        """Mark a notification as read"""
+        if notification_id in self.notifications:
+            notification = self.notifications[notification_id]
+            if notification["user_id"] == user_id:
+                notification["is_read"] = True
+                return True
         return False
     
-    async def send_bulk_notifications(self, 
-                                    user_ids: List[str], 
-                                    notification_type: NotificationType,
-                                    title: str, 
-                                    message: str, 
-                                    data: Dict = None) -> Dict[str, bool]:
-        """Send notifications to multiple users"""
-        results = {}
-        
-        for user_id in user_ids:
-            results[user_id] = await self.send_notification(
-                user_id, notification_type, title, message, data
-            )
-        
-        return results
-    
-    def register_push_token(self, user_id: str, token: str) -> bool:
-        """Register a push notification token for a user"""
-        try:
-            self.push_tokens[user_id] = token
-            logger.info(f"Push token registered for user {user_id}")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to register push token for user {user_id}: {e}")
-            return False
-    
-    def unregister_push_token(self, user_id: str) -> bool:
-        """Unregister push notification token for a user"""
-        try:
-            if user_id in self.push_tokens:
-                del self.push_tokens[user_id]
-                logger.info(f"Push token unregistered for user {user_id}")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to unregister push token for user {user_id}: {e}")
-            return False
-    
-    def get_user_notifications(self, user_id: str, limit: int = 50) -> List[Dict]:
-        """Get notifications for a specific user"""
-        if user_id in self.notifications:
-            # Return most recent notifications first
-            return sorted(
-                self.notifications[user_id], 
-                key=lambda x: x["timestamp"], 
-                reverse=True
-            )[:limit]
-        return []
-    
-    def mark_notification_read(self, user_id: str, notification_id: str) -> bool:
-        """Mark a notification as read"""
-        try:
-            if user_id in self.notifications:
-                for notification in self.notifications[user_id]:
-                    if notification["id"] == notification_id:
-                        notification["read"] = True
-                        return True
-            return False
-        except Exception as e:
-            logger.error(f"Failed to mark notification as read: {e}")
-            return False
-    
-    def mark_all_notifications_read(self, user_id: str) -> bool:
+    def mark_all_notifications_read(self, user_id: str) -> int:
         """Mark all notifications as read for a user"""
-        try:
-            if user_id in self.notifications:
-                for notification in self.notifications[user_id]:
-                    notification["read"] = True
-                return True
-            return False
-        except Exception as e:
-            logger.error(f"Failed to mark all notifications as read: {e}")
-            return False
+        count = 0
+        for notification in self.notifications.values():
+            if notification["user_id"] == user_id and not notification["is_read"]:
+                notification["is_read"] = True
+                count += 1
+        return count
     
-    def get_notification_stats(self, user_id: str) -> Dict:
+    def delete_notification(self, notification_id: str, user_id: str) -> bool:
+        """Delete a notification"""
+        if notification_id in self.notifications:
+            notification = self.notifications[notification_id]
+            if notification["user_id"] == user_id:
+                del self.notifications[notification_id]
+                return True
+        return False
+    
+    def get_notification_stats(self, user_id: str) -> Dict[str, int]:
         """Get notification statistics for a user"""
-        if user_id in self.notifications:
-            notifications = self.notifications[user_id]
-            total = len(notifications)
-            unread = len([n for n in notifications if not n["read"]])
-            
-            return {
-                "total_notifications": total,
-                "unread_notifications": unread,
-                "read_notifications": total - unread
-            }
+        user_notifications = [
+            notif for notif in self.notifications.values() 
+            if notif["user_id"] == user_id
+        ]
+        
+        total = len(user_notifications)
+        unread = len([notif for notif in user_notifications if not notif["is_read"]])
+        
         return {
-            "total_notifications": 0,
-            "unread_notifications": 0,
-            "read_notifications": 0
+            "total": total,
+            "unread": unread,
+            "read": total - unread
         }
 
 # Global notification service instance

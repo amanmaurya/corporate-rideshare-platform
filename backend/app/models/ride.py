@@ -24,9 +24,11 @@ class Ride(Base):
     fare = Column(Float, nullable=True)
     distance = Column(Float, nullable=True)
     duration = Column(Integer, nullable=True)  # in minutes
+    actual_duration = Column(Integer, nullable=True)  # actual duration in minutes
     max_passengers = Column(Integer, default=4)
     current_passengers = Column(Integer, default=1)
     notes = Column(Text, nullable=True)
+    payment_status = Column(String, default="pending")  # pending, completed, failed, refunded
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

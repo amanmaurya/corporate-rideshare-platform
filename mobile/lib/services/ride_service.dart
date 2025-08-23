@@ -1,5 +1,8 @@
 import '../models/ride.dart';
+import '../models/payment.dart';
 import '../services/api_service.dart';
+import '../services/payment_service.dart';
+import '../services/websocket_service.dart';
 
 class RideService {
   static Future<Ride> createRide({
@@ -27,7 +30,24 @@ class RideService {
       };
 
       final response = await ApiService.createRide(rideData);
-      return Ride.fromJson(response);
+      final ride = Ride.fromJson(response);
+      
+      // Send real-time update via WebSocket
+      try {
+        await WebSocketService.instance.updateRideStatus(
+          rideId: ride.id,
+          status: 'created',
+          additionalData: {
+            'pickup_location': pickupLocation,
+            'destination': destination,
+            'max_passengers': maxPassengers,
+          },
+        );
+      } catch (e) {
+        print('WebSocket update failed: $e');
+      }
+      
+      return ride;
     } catch (e) {
       throw Exception('Failed to create ride: ${e.toString()}');
     }
@@ -72,7 +92,23 @@ class RideService {
   static Future<RideRequest> requestRide(String rideId, {String? message}) async {
     try {
       final response = await ApiService.requestRide(rideId, message: message);
-      return RideRequest.fromJson(response);
+      final rideRequest = RideRequest.fromJson(response);
+      
+      // Send real-time update via WebSocket
+      try {
+        await WebSocketService.instance.updateRideStatus(
+          rideId: rideId,
+          status: 'requested',
+          additionalData: {
+            'user_id': rideRequest.userId,
+            'message': message,
+          },
+        );
+      } catch (e) {
+        print('WebSocket update failed: $e');
+      }
+      
+      return rideRequest;
     } catch (e) {
       throw Exception('Failed to request ride: ${e.toString()}');
     }
@@ -81,8 +117,119 @@ class RideService {
   static Future<void> deleteRide(String rideId) async {
     try {
       await ApiService.deleteRide(rideId);
+      
+      // Send real-time update via WebSocket
+      try {
+        await WebSocketService.instance.updateRideStatus(
+          rideId: rideId,
+          status: 'deleted',
+        );
+      } catch (e) {
+        print('WebSocket update failed: $e');
+      }
     } catch (e) {
       throw Exception('Failed to delete ride: ${e.toString()}');
+    }
+  }
+
+  /// Start a ride and update status
+  static Future<void> startRide(String rideId) async {
+    try {
+      // Update ride status via API
+      await ApiService.updateRide(rideId, {'status': 'in_progress'});
+      
+      // Send real-time update via WebSocket
+      try {
+        await WebSocketService.instance.updateRideStatus(
+          rideId: rideId,
+          status: 'in_progress',
+          additionalData: {
+            'actual_start_time': DateTime.now().toIso8601String(),
+          },
+        );
+      } catch (e) {
+        print('WebSocket update failed: $e');
+      }
+    } catch (e) {
+      throw Exception('Failed to start ride: ${e.toString()}');
+    }
+  }
+
+  /// Complete a ride and process payment
+  static Future<Payment> completeRide(String rideId) async {
+    try {
+      // Update ride status via API
+      await ApiService.updateRide(rideId, {'status': 'completed'});
+      
+      // Send real-time update via WebSocket
+      try {
+        await WebSocketService.instance.updateRideStatus(
+          rideId: rideId,
+          status: 'completed',
+          additionalData: {
+            'actual_end_time': DateTime.now().toIso8601String(),
+          },
+        );
+      } catch (e) {
+        print('WebSocket update failed: $e');
+      }
+      
+      // Process payment for completed ride
+      final payment = await PaymentService.processRidePayment(rideId: rideId);
+      return payment;
+      
+    } catch (e) {
+      throw Exception('Failed to complete ride: ${e.toString()}');
+    }
+  }
+
+  /// Update ride location during active ride
+  static Future<void> updateRideLocation({
+    required String rideId,
+    required double latitude,
+    required double longitude,
+  }) async {
+    try {
+      // Update location via API
+      await ApiService.updateRideLocation(rideId, latitude, longitude);
+      
+      // Send real-time location update via WebSocket
+      try {
+        await WebSocketService.instance.updateLocation(
+          rideId: rideId,
+          latitude: latitude,
+          longitude: longitude,
+        );
+      } catch (e) {
+        print('WebSocket location update failed: $e');
+      }
+      
+    } catch (e) {
+      throw Exception('Failed to update ride location: ${e.toString()}');
+    }
+  }
+
+  /// Get estimated fare for a ride
+  static Future<FareCalculation> getEstimatedFare({
+    required double distanceKm,
+    required int durationMinutes,
+  }) async {
+    try {
+      return await PaymentService.calculateFare(
+        distanceKm: distanceKm,
+        durationMinutes: durationMinutes,
+      );
+    } catch (e) {
+      throw Exception('Failed to calculate fare: ${e.toString()}');
+    }
+  }
+
+  /// Get payment history for rides
+  static Future<List<PaymentHistory>> getRidePaymentHistory() async {
+    try {
+      return await PaymentService.getPaymentHistory();
+    } catch (e) {
+      throw Exception('Failed to get payment history: ${e.toString()}');
     }
   }
 }

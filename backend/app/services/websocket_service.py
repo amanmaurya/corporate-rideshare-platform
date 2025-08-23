@@ -11,134 +11,144 @@ class ConnectionManager:
     def __init__(self):
         # Store active connections by user_id
         self.active_connections: Dict[str, WebSocket] = {}
-        # Store user's current location
-        self.user_locations: Dict[str, Dict] = {}
-        # Store ride requests waiting for matches
-        self.pending_rides: Dict[str, Dict] = {}
+        # Store company connections for broadcasting
+        self.company_connections: Dict[str, Set[str]] = {}
         
-    async def connect(self, websocket: WebSocket, user_id: str):
+    async def connect(self, websocket: WebSocket, user_id: str, company_id: str):
+        """Connect a new user"""
         await websocket.accept()
         self.active_connections[user_id] = websocket
-        logger.info(f"User {user_id} connected to WebSocket")
         
-        # Send current ride status if user has active rides
-        await self.send_ride_status(user_id)
+        # Add to company connections
+        if company_id not in self.company_connections:
+            self.company_connections[company_id] = set()
+        self.company_connections[company_id].add(user_id)
         
-    def disconnect(self, user_id: str):
+        logger.info(f"User {user_id} connected to company {company_id}")
+        
+        # Send welcome message
+        await self.send_personal_message({
+            "type": "connection",
+            "message": "Connected successfully",
+            "timestamp": datetime.utcnow().isoformat()
+        }, user_id)
+        
+    def disconnect(self, user_id: str, company_id: str):
+        """Disconnect a user"""
         if user_id in self.active_connections:
             del self.active_connections[user_id]
-        if user_id in self.user_locations:
-            del self.user_locations[user_id]
-        logger.info(f"User {user_id} disconnected from WebSocket")
+            
+        # Remove from company connections
+        if company_id in self.company_connections:
+            self.company_connections[company_id].discard(user_id)
+            if not self.company_connections[company_id]:
+                del self.company_connections[company_id]
+                
+        logger.info(f"User {user_id} disconnected from company {company_id}")
         
     async def send_personal_message(self, message: dict, user_id: str):
+        """Send message to specific user"""
         if user_id in self.active_connections:
             try:
                 await self.active_connections[user_id].send_text(json.dumps(message))
             except Exception as e:
-                logger.error(f"Failed to send message to user {user_id}: {e}")
-                self.disconnect(user_id)
+                logger.error(f"Error sending message to user {user_id}: {e}")
+                # Remove broken connection
+                del self.active_connections[user_id]
                 
-    async def broadcast_ride_request(self, ride_request: dict, company_id: str):
-        """Broadcast ride request to all available drivers in the company"""
-        message = {
-            "type": "ride_request",
-            "data": ride_request,
-            "timestamp": datetime.utcnow().isoformat()
-        }
-        
-        # Send to all drivers in the company
-        for user_id, websocket in self.active_connections.items():
-            if user_id in self.user_locations:
-                user_info = self.user_locations[user_id]
-                if (user_info.get("company_id") == company_id and 
-                    user_info.get("is_driver") and 
-                    user_info.get("is_available")):
+    async def broadcast_to_company(self, message: dict, company_id: str, exclude_user: Optional[str] = None):
+        """Broadcast message to all users in a company"""
+        if company_id in self.company_connections:
+            for user_id in self.company_connections[company_id]:
+                if user_id != exclude_user:
                     await self.send_personal_message(message, user_id)
                     
-    async def update_user_location(self, user_id: str, location_data: dict):
-        """Update user's current location"""
-        self.user_locations[user_id] = location_data
+    async def broadcast_ride_update(self, ride_data: dict, company_id: str, exclude_user: Optional[str] = None):
+        """Broadcast ride update to company"""
+        message = {
+            "type": "ride_update",
+            "data": ride_data,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        await self.broadcast_to_company(message, company_id, exclude_user)
         
-        # Notify relevant users about location update
-        await self.notify_location_update(user_id, location_data)
+    async def broadcast_ride_request(self, request_data: dict, company_id: str, exclude_user: Optional[str] = None):
+        """Broadcast ride request to company"""
+        message = {
+            "type": "ride_request",
+            "data": request_data,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        await self.broadcast_to_company(message, company_id, exclude_user)
         
-    async def notify_location_update(self, user_id: str, location_data: dict):
-        """Notify other users about location update (e.g., driver location for active rides)"""
-        if user_id in self.user_locations:
-            user_info = self.user_locations[user_id]
-            if user_info.get("is_driver"):
-                # Notify riders about driver location
-                await self.notify_riders_about_driver(user_id, location_data)
-                
-    async def notify_riders_about_driver(self, driver_id: str, location_data: dict):
-        """Notify riders about their driver's location"""
-        # This would need to be implemented based on active ride relationships
-        pass
+    async def broadcast_location_update(self, user_id: str, location_data: dict, company_id: str):
+        """Broadcast location update to company"""
+        message = {
+            "type": "location_update",
+            "user_id": user_id,
+            "data": location_data,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        await self.broadcast_to_company(message, company_id, exclude_user=user_id)
         
-    async def send_ride_status(self, user_id: str):
-        """Send current ride status to user"""
-        # This would query the database for user's active rides
-        pass
-        
-    async def handle_ride_request(self, ride_data: dict):
-        """Handle new ride request and find matches"""
-        company_id = ride_data.get("company_id")
-        pickup_location = ride_data.get("pickup_location")
-        destination = ride_data.get("destination")
-        
-        # Store pending ride
-        ride_id = ride_data.get("id")
-        self.pending_rides[ride_id] = ride_data
-        
-        # Find nearby available drivers
-        nearby_drivers = await self.find_nearby_drivers(
-            company_id, 
-            ride_data.get("pickup_latitude"), 
-            ride_data.get("pickup_longitude")
-        )
-        
-        # Send ride request to nearby drivers
-        for driver_id in nearby_drivers:
-            await self.send_personal_message({
-                "type": "ride_request",
-                "data": ride_data,
-                "timestamp": datetime.utcnow().isoformat()
-            }, driver_id)
-            
-    async def find_nearby_drivers(self, company_id: str, lat: float, lon: float, radius_km: float = 5.0):
-        """Find drivers within radius of pickup location"""
-        nearby_drivers = []
-        
-        for user_id, user_info in self.user_locations.items():
-            if (user_info.get("company_id") == company_id and 
-                user_info.get("is_driver") and 
-                user_info.get("is_available")):
-                
-                driver_lat = user_info.get("latitude")
-                driver_lon = user_info.get("longitude")
-                
-                if driver_lat and driver_lon:
-                    distance = self.calculate_distance(lat, lon, driver_lat, driver_lon)
-                    if distance <= radius_km:
-                        nearby_drivers.append(user_id)
-                        
-        return nearby_drivers
-        
-    def calculate_distance(self, lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-        """Calculate distance between two points using Haversine formula"""
-        import math
-        
-        R = 6371  # Earth's radius in kilometers
-        
-        lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
-        dlat = lat2 - lat1
-        dlon = lon2 - lon1
-        
-        a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
-        c = 2 * math.asin(math.sqrt(a))
-        
-        return R * c
+    async def send_notification(self, user_id: str, notification_data: dict):
+        """Send notification to specific user"""
+        message = {
+            "type": "notification",
+            "data": notification_data,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        await self.send_personal_message(message, user_id)
 
 # Global connection manager instance
 manager = ConnectionManager()
+
+class WebSocketService:
+    def __init__(self):
+        self.manager = manager
+        
+    async def handle_websocket(self, websocket: WebSocket, user_id: str, company_id: str):
+        """Handle WebSocket connection for a user"""
+        await self.manager.connect(websocket, user_id, company_id)
+        
+        try:
+            while True:
+                # Receive message from client
+                data = await websocket.receive_text()
+                message = json.loads(data)
+                
+                # Handle different message types
+                await self.handle_message(message, user_id, company_id)
+                
+        except WebSocketDisconnect:
+            self.manager.disconnect(user_id, company_id)
+        except Exception as e:
+            logger.error(f"WebSocket error for user {user_id}: {e}")
+            self.manager.disconnect(user_id, company_id)
+            
+    async def handle_message(self, message: dict, user_id: str, company_id: str):
+        """Handle incoming WebSocket messages"""
+        message_type = message.get("type")
+        
+        if message_type == "ping":
+            # Respond to ping with pong
+            await self.manager.send_personal_message({
+                "type": "pong",
+                "timestamp": datetime.utcnow().isoformat()
+            }, user_id)
+            
+        elif message_type == "location_update":
+            # Handle location update
+            location_data = message.get("data", {})
+            await self.manager.broadcast_location_update(user_id, location_data, company_id)
+            
+        elif message_type == "ride_status":
+            # Handle ride status update
+            ride_data = message.get("data", {})
+            await self.manager.broadcast_ride_update(ride_data, company_id, exclude_user=user_id)
+            
+        else:
+            logger.warning(f"Unknown message type: {message_type}")
+
+# Global WebSocket service instance
+websocket_service = WebSocketService()
