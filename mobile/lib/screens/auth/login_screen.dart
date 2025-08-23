@@ -18,12 +18,44 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool _isLoading = false;
   bool _obscurePassword = true;
+  String? _selectedTestUser;
+
+  // Test user credentials for easy testing
+  final Map<String, Map<String, String>> _testUsers = {
+    'Select Test User': {'email': '', 'password': ''},
+    'Admin': {'email': 'admin@techcorp.com', 'password': 'admin123'},
+    'User': {'email': 'john.doe@techcorp.com', 'password': 'user123'},
+    'Driver': {'email': 'mike.driver@techcorp.com', 'password': 'driver123'},
+  };
 
   @override
   void initState() {
     super.initState();
     // Pre-populate with test company ID for development
     _companyIdController.text = 'company-1';
+  }
+
+  void _onTestUserSelected(String? value) {
+    if (value != null && value != 'Select Test User') {
+      final user = _testUsers[value];
+      if (user != null) {
+        setState(() {
+          _selectedTestUser = value;
+          _emailController.text = user['email']!;
+          _passwordController.text = user['password']!;
+        });
+        
+        // Show a brief success message
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ ${value} credentials loaded!'),
+            backgroundColor: AppColors.successColor,
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -131,6 +163,84 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 16),
 
+                // Test User Selection Dropdown
+                Container(
+                  decoration: BoxDecoration(
+                    color: _selectedTestUser != null && _selectedTestUser != 'Select Test User'
+                        ? AppColors.primaryColor.withOpacity(0.1)
+                        : AppColors.surfaceColor,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: _selectedTestUser != null && _selectedTestUser != 'Select Test User'
+                          ? AppColors.primaryColor
+                          : AppColors.primaryColor.withOpacity(0.3),
+                      width: _selectedTestUser != null && _selectedTestUser != 'Select Test User' ? 2 : 1,
+                    ),
+                  ),
+                  child: DropdownButtonFormField<String>(
+                    value: _selectedTestUser,
+                    decoration: InputDecoration(
+                      labelText: 'Quick Test Login',
+                      hintText: 'Select a test user to auto-fill credentials',
+                      prefixIcon: Icon(
+                        _selectedTestUser != null && _selectedTestUser != 'Select Test User'
+                            ? Icons.check_circle
+                            : Icons.person_add,
+                        color: _selectedTestUser != null && _selectedTestUser != 'Select Test User'
+                            ? AppColors.successColor
+                            : AppColors.primaryColor,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      filled: true,
+                      fillColor: Colors.transparent,
+                      helperText: _selectedTestUser != null && _selectedTestUser != 'Select Test User'
+                          ? 'Credentials filled! Click Login to continue.'
+                          : 'Choose a test user for seamless testing',
+                      helperMaxLines: 2,
+                    ),
+                    items: _testUsers.keys.map((String user) {
+                      return DropdownMenuItem<String>(
+                        value: user,
+                        child: Text(
+                          user,
+                          style: TextStyle(
+                            color: user == 'Select Test User' 
+                                ? AppColors.textSecondaryColor 
+                                : AppColors.textPrimaryColor,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: _onTestUserSelected,
+                    validator: (value) => null, // Optional field
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Clear Selection Button
+                if (_selectedTestUser != null && _selectedTestUser != 'Select Test User')
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton.icon(
+                        onPressed: () {
+                          setState(() {
+                            _selectedTestUser = null;
+                            _emailController.clear();
+                            _passwordController.clear();
+                          });
+                        },
+                        icon: const Icon(Icons.clear, size: 16),
+                        label: const Text('Clear Selection'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppColors.textSecondaryColor,
+                        ),
+                      ),
+                    ],
+                  ),
+
                 // Email Field
                 TextFormField(
                   controller: _emailController,
@@ -138,11 +248,20 @@ class _LoginScreenState extends State<LoginScreen> {
                   decoration: InputDecoration(
                     labelText: 'Email',
                     prefixIcon: const Icon(Icons.email),
+                    suffixIcon: _selectedTestUser != null && _selectedTestUser != 'Select Test User'
+                        ? Icon(
+                            Icons.auto_awesome,
+                            color: AppColors.successColor,
+                            size: 20,
+                          )
+                        : null,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                     filled: true,
-                    fillColor: AppColors.surfaceColor,
+                    fillColor: _selectedTestUser != null && _selectedTestUser != 'Select Test User'
+                        ? AppColors.successColor.withOpacity(0.1)
+                        : AppColors.surfaceColor,
                   ),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
@@ -163,19 +282,32 @@ class _LoginScreenState extends State<LoginScreen> {
                   decoration: InputDecoration(
                     labelText: 'Password',
                     prefixIcon: const Icon(Icons.lock),
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _obscurePassword ? Icons.visibility : Icons.visibility_off,
-                      ),
-                      onPressed: () {
-                        setState(() => _obscurePassword = !_obscurePassword);
-                      },
+                    suffixIcon: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_selectedTestUser != null && _selectedTestUser != 'Select Test User')
+                          Icon(
+                            Icons.auto_awesome,
+                            color: AppColors.successColor,
+                            size: 20,
+                          ),
+                        IconButton(
+                          icon: Icon(
+                            _obscurePassword ? Icons.visibility : Icons.visibility_off,
+                          ),
+                          onPressed: () {
+                            setState(() => _obscurePassword = !_obscurePassword);
+                          },
+                        ),
+                      ],
                     ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                     filled: true,
-                    fillColor: AppColors.surfaceColor,
+                    fillColor: _selectedTestUser != null && _selectedTestUser != 'Select Test User'
+                        ? AppColors.successColor.withOpacity(0.1)
+                        : AppColors.surfaceColor,
                   ),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
@@ -250,21 +382,49 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.lightbulb_outline,
+                            color: AppColors.primaryColor,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '💡 Pro Tip:',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.primaryColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
                       Text(
-                        '🧪 Test Credentials:',
+                        'Use the "Quick Test Login" dropdown above to instantly fill in credentials for seamless testing!',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondaryColor,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        '🧪 Available Test Accounts:',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           color: AppColors.primaryColor,
+                          fontSize: 12,
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 4),
                       Text(
                         'Admin: admin@techcorp.com / admin123\n'
                         'User: john.doe@techcorp.com / user123\n'
                         'Driver: mike.driver@techcorp.com / driver123\n'
                         'Company ID: company-1',
                         style: TextStyle(
-                          fontSize: 12,
+                          fontSize: 11,
                           color: AppColors.textSecondaryColor,
                         ),
                       ),

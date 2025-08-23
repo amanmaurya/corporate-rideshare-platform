@@ -5,6 +5,7 @@ import '../../services/auth_service.dart';
 import '../../utils/constants.dart';
 import '../ride/ride_requests_screen.dart';
 import '../rides/real_time_ride_screen.dart';
+import '../ride/create_ride_screen.dart';
 
 class DriverDashboardScreen extends StatefulWidget {
   const DriverDashboardScreen({Key? key}) : super(key: key);
@@ -42,47 +43,42 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
         return;
       }
 
-      final [myRides, allRides] = await Future.wait([
+      final [myRides, userRequests] = await Future.wait([
         RideService.getMyRides(),
-        RideService.getRides(),
+        RideService.getUserRideRequests(),
       ]);
 
-      // Only get requests for rides where the user can actually manage them
+      // Cast userRequests to the correct type
+      final typedUserRequests = (userRequests as List).cast<RideRequest>();
+
+      // Filter requests based on user's role and permissions
       List<RideRequest> manageableRequests = [];
       List<RideRequest> driverOffers = [];
       
-      for (final ride in allRides) {
+      for (final request in typedUserRequests) {
+        // Get the ride details to check permissions
         try {
-          // Only try to get requests if user can manage this ride
+          final ride = await RideService.getRide(request.rideId);
+          
+          // Check if user can manage this ride
           if (ride.riderId == currentUser.id || 
               ride.driverId == currentUser.id || 
               currentUser.role == 'admin') {
-            
-            final requests = await RideService.getRideRequests(ride.id);
-            manageableRequests.addAll(requests);
+            manageableRequests.add(request);
           }
           
-          // Check if current user has offered to drive this ride
-          if (ride.driverId == null && currentUser.isDriver) {
-            try {
-              final requests = await RideService.getRideRequests(ride.id);
-              final myOffer = requests.where((req) => 
-                req.userId == currentUser.id && req.status == 'driver_offer'
-              ).toList();
-              driverOffers.addAll(myOffer);
-            } catch (e) {
-              // User can't see requests for this ride, skip
-              print('Cannot access requests for ride ${ride.id}: $e');
-            }
+          // Check if this is a driver offer
+          if (request.status == 'driver_offer' && request.userId == currentUser.id) {
+            driverOffers.add(request);
           }
         } catch (e) {
-          // User is not authorized to see requests for this ride
-          print('Not authorized to get requests for ride ${ride.id}: $e');
+          // Ride not found or user not authorized, skip
+          print('Cannot access ride ${request.rideId}: $e');
         }
       }
 
       setState(() {
-        _myRides = myRides;
+        _myRides = (myRides as List).cast<Ride>();
         // Only show pending requests for rides the user can manage
         _pendingRequests = manageableRequests.where((request) => 
           request.status == 'pending'
@@ -202,7 +198,14 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
       body: _buildBody(),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
-          // TODO: Navigate to create ride screen
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => CreateRideScreen(
+                onRideCreated: _loadDashboardData,
+              ),
+            ),
+          );
         },
         icon: const Icon(Icons.add),
         label: const Text('Create Ride'),

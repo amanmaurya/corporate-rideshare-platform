@@ -75,12 +75,46 @@ async def get_rides(current_user: User = Depends(get_current_user),
                    status: Optional[str] = None,
                    limit: int = 50):
     """Get rides for current user's company"""
-    query = db.query(Ride).filter(Ride.company_id == current_user.company_id)
+    # Join with User table to get rider information
+    query = db.query(Ride, User.name.label('rider_name'), User.email.label('rider_email'))\
+              .join(User, Ride.rider_id == User.id)\
+              .filter(Ride.company_id == current_user.company_id)
 
     if status:
         query = query.filter(Ride.status == status)
 
-    rides = query.limit(limit).all()
+    results = query.limit(limit).all()
+    
+    # Convert to RideResponse with rider information
+    rides = []
+    for ride, rider_name, rider_email in results:
+        ride_dict = {
+            'id': ride.id,
+            'company_id': ride.company_id,
+            'rider_id': ride.rider_id,
+            'driver_id': ride.driver_id,
+            'pickup_location': ride.pickup_location,
+            'destination': ride.destination,
+            'pickup_latitude': ride.pickup_latitude,
+            'pickup_longitude': ride.pickup_longitude,
+            'destination_latitude': ride.destination_latitude,
+            'destination_longitude': ride.destination_longitude,
+            'scheduled_time': ride.scheduled_time,
+            'notes': ride.notes,
+            'max_passengers': ride.max_passengers,
+            'status': ride.status,
+            'fare': ride.fare,
+            'distance': ride.distance,
+            'duration': ride.duration,
+            'current_passengers': ride.current_passengers,
+            'actual_start_time': ride.actual_start_time,
+            'actual_end_time': ride.actual_end_time,
+            'created_at': ride.created_at,
+            'rider_name': rider_name,
+            'rider_email': rider_email,
+        }
+        rides.append(ride_dict)
+    
     return rides
 
 @router.get("/my-rides", response_model=List[RideResponse])
@@ -676,3 +710,16 @@ async def get_my_ride_request(ride_id: str, current_user: User = Depends(get_cur
         )
 
     return user_request
+
+@router.get("/user/my-requests", response_model=List[RideRequestResponse])
+async def get_my_all_ride_requests(current_user: User = Depends(get_current_user), 
+                                  db: Session = Depends(get_database)):
+    """Get all ride requests for the current user across all rides"""
+    # Get all requests where the current user is either:
+    # 1. A passenger requesting to join a ride
+    # 2. A driver offering to drive a ride
+    user_requests = db.query(RideRequest).filter(
+        RideRequest.user_id == current_user.id
+    ).all()
+    
+    return user_requests

@@ -116,6 +116,15 @@ class RideService {
     }
   }
 
+  static Future<List<RideRequest>> getUserRideRequests() async {
+    try {
+      final response = await ApiService.getUserRideRequests();
+      return response.map((json) => RideRequest.fromJson(json)).toList();
+    } catch (e) {
+      throw Exception('Failed to get user ride requests: ${e.toString()}');
+    }
+  }
+
   static Future<Map<String, dynamic>> acceptRideRequest(String rideId, String requestId) async {
     try {
       final response = await ApiService.acceptRideRequest(rideId, requestId);

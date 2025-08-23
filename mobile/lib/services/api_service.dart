@@ -226,14 +226,30 @@ class ApiService {
         headers: await _getAuthHeaders(),
       );
 
+      // Check status code FIRST, before calling _handleResponse
+      if (response.statusCode == 404) {
+        return null;  // User has no request for this ride
+      }
+
+      // Only call _handleResponse for successful responses
       return _handleResponse(response);
     } catch (e) {
-      // If user has no request for this ride, return null instead of throwing
-      if (e.toString().contains('You have not requested this ride')) {
+      // Handle any other errors
+      if (e.toString().contains('You have not requested this ride') || 
+          e.toString().contains('404')) {
         return null;
       }
       rethrow;
     }
+  }
+
+  static Future<List<dynamic>> getUserRideRequests() async {
+    final response = await http.get(
+      Uri.parse('${AppConstants.ridesEndpoint}/user/my-requests'),
+      headers: await _getAuthHeaders(),
+    );
+
+    return await _handleListResponse(response);
   }
 
   static Future<void> deleteRide(String rideId) async {
@@ -345,3 +361,5 @@ class ApiService {
     }
   }
 }
+
+

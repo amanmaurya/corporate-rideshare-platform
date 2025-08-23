@@ -30,6 +30,10 @@ class Ride {
   
   // Driver offers
   final List<DriverOffer>? driverOffers;
+  
+  // Rider information
+  final String? riderName;
+  final String? riderEmail;
 
   Ride({
     required this.id,
@@ -59,6 +63,8 @@ class Ride {
     this.driverRating,
     this.driverIsAvailable,
     this.driverOffers,
+    this.riderName,
+    this.riderEmail,
   });
 
   factory Ride.fromJson(Map<String, dynamic> json) {
@@ -100,11 +106,17 @@ class Ride {
               .map((offer) => DriverOffer.fromJson(offer))
               .toList()
           : null,
+      riderName: json['rider_name'],
+      riderEmail: json['rider_email'],
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
+      'id': id,
+      'company_id': companyId,
+      'rider_id': riderId,
+      'driver_id': driverId,
       'pickup_location': pickupLocation,
       'destination': destination,
       'pickup_latitude': pickupLatitude,
@@ -114,6 +126,22 @@ class Ride {
       'scheduled_time': scheduledTime?.toIso8601String(),
       'notes': notes,
       'max_passengers': maxPassengers,
+      'status': status,
+      'fare': fare,
+      'distance': distance,
+      'duration': duration,
+      'current_passengers': currentPassengers,
+      'actual_start_time': actualStartTime?.toIso8601String(),
+      'actual_end_time': actualEndTime?.toIso8601String(),
+      'created_at': createdAt.toIso8601String(),
+      'driver_name': driverName,
+      'driver_email': driverEmail,
+      'driver_phone': driverPhone,
+      'driver_rating': driverRating,
+      'driver_is_available': driverIsAvailable,
+      'driver_offers': driverOffers?.map((offer) => offer.toJson()).toList(),
+      'rider_name': riderName,
+      'rider_email': riderEmail,
     };
   }
 }

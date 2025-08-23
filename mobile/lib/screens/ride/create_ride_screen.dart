@@ -5,7 +5,9 @@ import '../../services/location_service.dart';
 import '../../utils/constants.dart';
 
 class CreateRideScreen extends StatefulWidget {
-  const CreateRideScreen({Key? key}) : super(key: key);
+  final VoidCallback? onRideCreated;
+  
+  const CreateRideScreen({Key? key, this.onRideCreated}) : super(key: key);
 
   @override
   State<CreateRideScreen> createState() => _CreateRideScreenState();
@@ -120,6 +122,10 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
             backgroundColor: AppColors.successColor,
           ),
         );
+        
+        // Call the callback to refresh dashboard data
+        widget.onRideCreated?.call();
+        
         Navigator.of(context).pop();
       }
     } catch (e) {

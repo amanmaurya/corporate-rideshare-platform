@@ -41,6 +41,8 @@ class RideResponse(RideBase):
     actual_start_time: Optional[datetime] = None
     actual_end_time: Optional[datetime] = None
     created_at: datetime
+    rider_name: Optional[str] = None
+    rider_email: Optional[str] = None
 
     class Config:
         from_attributes = True
