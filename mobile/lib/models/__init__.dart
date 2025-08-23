@@ -1,6 +1,5 @@
-export 'company.dart';
-export 'notification.dart';
-export 'payment.dart';
-export 'ride.dart';
+// Package initialization
 export 'user.dart';
+export 'ride.dart';
 export 'websocket_message.dart';
+export 'notification.dart';

@@ -1,16 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'config/app_config.dart';
-import 'screens/splash_screen.dart';
-import 'services/websocket_service.dart';
+import 'services/auth_service.dart';
+import 'screens/auth/login_screen.dart';
+import 'screens/home/home_screen.dart';
 import 'utils/constants.dart';
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  
-  // Initialize app configuration
-  await AppConfig.initialize();
-  
+void main() {
   runApp(const CorporateRideShareApp());
 }
 
@@ -22,39 +16,48 @@ class CorporateRideShareApp extends StatelessWidget {
     return MaterialApp(
       title: 'Corporate RideShare',
       theme: ThemeData(
-        primarySwatch: Colors.blue,
-        useMaterial3: true,
+        primarySwatch: MaterialColor(
+          AppColors.primaryColor.value,
+          <int, Color>{
+            50: AppColors.primaryColor.withOpacity(0.1),
+            100: AppColors.primaryColor.withOpacity(0.2),
+            200: AppColors.primaryColor.withOpacity(0.3),
+            300: AppColors.primaryColor.withOpacity(0.4),
+            400: AppColors.primaryColor.withOpacity(0.5),
+            500: AppColors.primaryColor,
+            600: AppColors.primaryColor.withOpacity(0.7),
+            700: AppColors.primaryColor.withOpacity(0.8),
+            800: AppColors.primaryColor.withOpacity(0.9),
+            900: AppColors.primaryColor.withOpacity(1.0),
+          },
+        ),
         colorScheme: ColorScheme.fromSeed(
           seedColor: AppColors.primaryColor,
-          brightness: Brightness.light,
         ),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: AppColors.primaryColor,
-          foregroundColor: Colors.white,
-          elevation: 0,
-        ),
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.primaryColor,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
-        ),
-        cardTheme: CardTheme(
+        useMaterial3: true,
+        scaffoldBackgroundColor: AppColors.backgroundColor,
+        cardTheme: CardThemeData(
+          color: AppColors.surfaceColor,
           elevation: 2,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
         ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.primaryColor,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        ),
         inputDecorationTheme: InputDecorationTheme(
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(12),
           ),
           filled: true,
-          fillColor: Colors.grey[50],
+          fillColor: AppColors.surfaceColor,
         ),
       ),
       home: const SplashScreen(),
@@ -70,73 +73,32 @@ class SplashScreen extends StatefulWidget {
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMixin {
-  late AnimationController _animationController;
-  late Animation<double> _fadeAnimation;
-  late Animation<double> _scaleAnimation;
-
+class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    
-    _animationController = AnimationController(
-      duration: const Duration(seconds: 2),
-      vsync: this,
-    );
-    
-    _fadeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeIn,
-    ));
-    
-    _scaleAnimation = Tween<double>(
-      begin: 0.8,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.elasticOut,
-    ));
-    
-    _animationController.forward();
-    
-    // Initialize WebSocket service after a delay
-    Future.delayed(const Duration(seconds: 1), () {
-      _initializeWebSocket();
-    });
-    
-    // Navigate to appropriate screen after splash
-    Future.delayed(const Duration(seconds: 3), () {
-      _navigateToApp();
-    });
+    _initializeApp();
   }
 
-  Future<void> _initializeWebSocket() async {
-    try {
-      // Initialize WebSocket service
-      await WebSocketService.instance.connect();
-      
-      // Start heartbeat to keep connection alive
-      WebSocketService.instance.startHeartbeat();
-      
-      print('✅ WebSocket service initialized successfully');
-    } catch (e) {
-      print('❌ WebSocket initialization failed: $e');
-      // Continue without WebSocket - app will still work
+  Future<void> _initializeApp() async {
+    // Initialize authentication service
+    await AuthService.initialize();
+
+    // Add a small delay for splash screen
+    await Future.delayed(const Duration(seconds: 2));
+
+    // Navigate to appropriate screen
+    if (mounted) {
+      if (AuthService.isAuthenticated) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (context) => const HomeScreen()),
+        );
+      } else {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (context) => const LoginScreen()),
+        );
+      }
     }
-  }
-
-  void _navigateToApp() {
-    // Navigate to home screen or login based on authentication status
-    // This will be handled by the splash screen logic
-  }
-
-  @override
-  void dispose() {
-    _animationController.dispose();
-    super.dispose();
   }
 
   @override
@@ -144,90 +106,34 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
     return Scaffold(
       backgroundColor: AppColors.primaryColor,
       body: Center(
-        child: AnimatedBuilder(
-          animation: _animationController,
-          builder: (context, child) {
-            return FadeTransition(
-              opacity: _fadeAnimation,
-              child: ScaleTransition(
-                scale: _scaleAnimation,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // App Icon/Logo
-                    Container(
-                      width: 120,
-                      height: 120,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(24),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
-                            blurRadius: 20,
-                            offset: const Offset(0, 10),
-                          ),
-                        ],
-                      ),
-                      child: const Icon(
-                        Icons.directions_car,
-                        size: 60,
-                        color: AppColors.primaryColor,
-                      ),
-                    ),
-                    
-                    const SizedBox(height: 32),
-                    
-                    // App Title
-                    const Text(
-                      'Corporate RideShare',
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                        letterSpacing: 1.2,
-                      ),
-                    ),
-                    
-                    const SizedBox(height: 8),
-                    
-                    // App Subtitle
-                    const Text(
-                      'Share rides with colleagues',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Colors.white70,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                    
-                    const SizedBox(height: 48),
-                    
-                    // Loading indicator
-                    const SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                        strokeWidth: 2,
-                      ),
-                    ),
-                    
-                    const SizedBox(height: 24),
-                    
-                    // Version info
-                    Text(
-                      'Version ${AppConfig.appVersion}',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Colors.white54,
-                      ),
-                    ),
-                  ],
-                ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.directions_car,
+              size: 100,
+              color: Colors.white,
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'Corporate RideShare',
+              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
               ),
-            );
-          },
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Connect with your colleagues',
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                color: Colors.white.withOpacity(0.8),
+              ),
+            ),
+            const SizedBox(height: 48),
+            const CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+            ),
+          ],
         ),
       ),
     );

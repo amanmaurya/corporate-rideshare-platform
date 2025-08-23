@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/notification.dart';
 import '../../services/notification_service.dart';
-import '../../utils/colors.dart';
+import '../../utils/constants.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({Key? key}) : super(key: key);

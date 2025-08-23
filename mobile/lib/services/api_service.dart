@@ -144,6 +144,98 @@ class ApiService {
     return _handleResponse(response);
   }
 
+  static Future<Map<String, dynamic>> acceptRideRequest(String rideId, String requestId) async {
+    final response = await http.post(
+      Uri.parse('${AppConstants.ridesEndpoint}/$rideId/accept'),
+      headers: await _getAuthHeaders(),
+      body: json.encode({
+        'request_id': requestId,
+      }),
+    );
+
+    return _handleResponse(response);
+  }
+
+  static Future<Map<String, dynamic>> rejectRideRequest(String rideId, String requestId) async {
+    final response = await http.post(
+      Uri.parse('${AppConstants.ridesEndpoint}/$rideId/reject'),
+      headers: await _getAuthHeaders(),
+      body: json.encode({
+        'request_id': requestId,
+      }),
+    );
+
+    return _handleResponse(response);
+  }
+
+  static Future<Map<String, dynamic>> rejectPassengerRequest(String rideId, String requestId) async {
+    final response = await http.post(
+      Uri.parse('${AppConstants.ridesEndpoint}/$rideId/reject-passenger'),
+      headers: await _getAuthHeaders(),
+      body: json.encode({
+        'request_id': requestId,
+      }),
+    );
+
+    return _handleResponse(response);
+  }
+
+  static Future<Map<String, dynamic>> acceptPassengerRequest(String rideId, String requestId) async {
+    final response = await http.post(
+      Uri.parse('${AppConstants.ridesEndpoint}/$rideId/accept-passenger'),
+      headers: await _getAuthHeaders(),
+      body: json.encode({
+        'request_id': requestId,
+      }),
+    );
+
+    return _handleResponse(response);
+  }
+
+  static Future<Map<String, dynamic>> startRide(String rideId) async {
+    final response = await http.post(
+      Uri.parse('${AppConstants.ridesEndpoint}/$rideId/start'),
+      headers: await _getAuthHeaders(),
+    );
+
+    return _handleResponse(response);
+  }
+
+  static Future<Map<String, dynamic>> completeRide(String rideId) async {
+    final response = await http.post(
+      Uri.parse('${AppConstants.ridesEndpoint}/$rideId/complete'),
+      headers: await _getAuthHeaders(),
+    );
+
+    return _handleResponse(response);
+  }
+
+  static Future<List<dynamic>> getRideRequests(String rideId) async {
+    final response = await http.get(
+      Uri.parse('${AppConstants.ridesEndpoint}/$rideId/requests'),
+      headers: await _getAuthHeaders(),
+    );
+
+    return await _handleListResponse(response);
+  }
+
+  static Future<Map<String, dynamic>?> getMyRideRequest(String rideId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('${AppConstants.ridesEndpoint}/$rideId/my-request'),
+        headers: await _getAuthHeaders(),
+      );
+
+      return _handleResponse(response);
+    } catch (e) {
+      // If user has no request for this ride, return null instead of throwing
+      if (e.toString().contains('You have not requested this ride')) {
+        return null;
+      }
+      rethrow;
+    }
+  }
+
   static Future<void> deleteRide(String rideId) async {
     final response = await http.delete(
       Uri.parse('${AppConstants.ridesEndpoint}/$rideId'),
@@ -156,163 +248,100 @@ class ApiService {
     }
   }
 
-  // New ride management endpoints
-  static Future<Map<String, dynamic>> updateRide(String rideId, Map<String, dynamic> updateData) async {
-    final response = await http.put(
-      Uri.parse('${AppConstants.ridesEndpoint}/$rideId'),
-      headers: await _getAuthHeaders(),
-      body: json.encode(updateData),
-    );
-
-    return _handleResponse(response);
-  }
-
-  static Future<void> updateRideLocation(String rideId, double latitude, double longitude) async {
-    final response = await http.post(
-      Uri.parse('${AppConstants.ridesEndpoint}/$rideId/update-location'),
-      headers: await _getAuthHeaders(),
-      body: json.encode({
-        'latitude': latitude,
-        'longitude': longitude,
-      }),
-    );
-
-    if (response.statusCode >= 400) {
-      final error = json.decode(response.body);
-      throw Exception(error['detail'] ?? 'Failed to update ride location');
-    }
-  }
-
-  static Future<void> startRide(String rideId) async {
-    final response = await http.post(
-      Uri.parse('${AppConstants.ridesEndpoint}/$rideId/start'),
-      headers: await _getAuthHeaders(),
-    );
-
-    if (response.statusCode >= 400) {
-      final error = json.decode(response.body);
-      throw Exception(error['detail'] ?? 'Failed to start ride');
-    }
-  }
-
-  static Future<Map<String, dynamic>> completeRide(String rideId) async {
-    final response = await http.post(
-      Uri.parse('${AppConstants.ridesEndpoint}/$rideId/complete'),
-      headers: await _getAuthHeaders(),
-    );
-
-    return _handleResponse(response);
-  }
-
-  // Payment endpoints
-  static Future<Map<String, dynamic>> processRidePayment(String rideId, {double? amount}) async {
-    final response = await http.post(
-      Uri.parse('${AppConstants.paymentsEndpoint}/ride/$rideId'),
-      headers: await _getAuthHeaders(),
-      body: json.encode({
-        'amount': amount,
-        'currency': 'USD',
-        'description': 'Ride payment',
-      }),
-    );
-
-    return _handleResponse(response);
-  }
-
-  static Future<Map<String, dynamic>> processCorporatePayment(double amount, {String? description}) async {
-    final response = await http.post(
-      Uri.parse('${AppConstants.paymentsEndpoint}/corporate'),
-      headers: await _getAuthHeaders(),
-      body: json.encode({
-        'amount': amount,
-        'currency': 'USD',
-        'description': description ?? 'Corporate service payment',
-      }),
-    );
-
-    return _handleResponse(response);
-  }
-
-  static Future<Map<String, dynamic>> requestRefund(String paymentId, double amount, String reason) async {
-    final response = await http.post(
-      Uri.parse('${AppConstants.paymentsEndpoint}/refund'),
-      headers: await _getAuthHeaders(),
-      body: json.encode({
-        'payment_id': paymentId,
-        'amount': amount,
-        'reason': reason,
-      }),
-    );
-
-    return _handleResponse(response);
-  }
-
-  static Future<List<dynamic>> getPaymentHistory() async {
-    final response = await http.get(
-      Uri.parse('${AppConstants.paymentsEndpoint}/history'),
-      headers: await _getAuthHeaders(),
-    );
-
-    return await _handleListResponse(response);
-  }
-
-  static Future<Map<String, dynamic>> getPaymentStatus(String paymentId) async {
-    final response = await http.get(
-      Uri.parse('${AppConstants.paymentsEndpoint}/status/$paymentId'),
-      headers: await _getAuthHeaders(),
-    );
-
-    return _handleResponse(response);
-  }
-
-  static Future<Map<String, dynamic>> calculateFare(double distanceKm, int durationMinutes) async {
-    final response = await http.get(
-      Uri.parse('${AppConstants.paymentsEndpoint}/fare/calculate?distance_km=$distanceKm&duration_minutes=$durationMinutes'),
-      headers: await _getAuthHeaders(),
-    );
-
-    return _handleResponse(response);
-  }
-
   // Company endpoints
   static Future<List<dynamic>> getCompanies() async {
     final response = await http.get(
-      Uri.parse('${AppConstants.baseUrl}/companies'),
+      Uri.parse('${AppConstants.companiesEndpoint}/'),
       headers: await _getAuthHeaders(),
     );
 
     return await _handleListResponse(response);
+  }
+
+  static Future<Map<String, dynamic>> getCompany(String companyId) async {
+    final response = await http.get(
+      Uri.parse('${AppConstants.companiesEndpoint}/$companyId'),
+      headers: await _getAuthHeaders(),
+    );
+
+    return _handleResponse(response);
   }
 
   // User endpoints
-  static Future<List<dynamic>> getUsers() async {
-    final response = await http.get(
-      Uri.parse('${AppConstants.baseUrl}/users'),
-      headers: await _getAuthHeaders(),
-    );
-
-    return await _handleListResponse(response);
-  }
-
-  // Notification endpoints
-  static Future<List<dynamic>> getNotifications() async {
-    final response = await http.get(
-      Uri.parse('${AppConstants.notificationsEndpoint}/'),
-      headers: await _getAuthHeaders(),
-    );
-
-    return await _handleListResponse(response);
-  }
-
-  static Future<void> markNotificationRead(String notificationId) async {
+  static Future<Map<String, dynamic>> updateUser(String userId, Map<String, dynamic> userData) async {
     final response = await http.put(
-      Uri.parse('${AppConstants.notificationsEndpoint}/$notificationId/read'),
+      Uri.parse('${AppConstants.usersEndpoint}/$userId'),
+      headers: await _getAuthHeaders(),
+      body: json.encode(userData),
+    );
+
+    return _handleResponse(response);
+  }
+
+  static Future<void> deleteUser(String userId) async {
+    final response = await http.delete(
+      Uri.parse('${AppConstants.usersEndpoint}/$userId'),
       headers: await _getAuthHeaders(),
     );
 
     if (response.statusCode >= 400) {
       final error = json.decode(response.body);
-      throw Exception(error['detail'] ?? 'Failed to mark notification as read');
+      throw Exception(error['detail'] ?? 'Failed to delete user');
+    }
+  }
+
+  // Driver management
+  static Future<Map<String, dynamic>> registerAsDriver(Map<String, dynamic> driverData) async {
+    try {
+      final response = await http.post(
+        Uri.parse('${AppConstants.usersEndpoint}/register-driver'),
+        headers: await _getAuthHeaders(),
+        body: json.encode(driverData),
+      );
+      return _handleResponse(response);
+    } catch (e) {
+      throw Exception('Failed to register as driver: ${e.toString()}');
+    }
+  }
+
+  static Future<Map<String, dynamic>> offerToDriveRide(String rideId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('${AppConstants.ridesEndpoint}/$rideId/offer-driving'),
+        headers: await _getAuthHeaders(),
+      );
+      return _handleResponse(response);
+    } catch (e) {
+      throw Exception('Failed to offer to drive ride: ${e.toString()}');
+    }
+  }
+
+  static Future<void> cancelRideRequest(String requestId) async {
+    try {
+      final response = await http.delete(
+        Uri.parse('${AppConstants.ridesEndpoint}/requests/$requestId'),
+        headers: await _getAuthHeaders(),
+      );
+      
+      if (response.statusCode >= 400) {
+        final error = json.decode(response.body);
+        throw Exception(error['detail'] ?? 'Failed to cancel ride request');
+      }
+    } catch (e) {
+      throw Exception('Failed to cancel ride request: ${e.toString()}');
+    }
+  }
+
+  static Future<Map<String, dynamic>> assignDriverToRide(String rideId, String driverId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('${AppConstants.ridesEndpoint}/$rideId/assign-driver'),
+        headers: await _getAuthHeaders(),
+        body: json.encode({'driver_id': driverId}),
+      );
+      return _handleResponse(response);
+    } catch (e) {
+      throw Exception('Failed to assign driver to ride: ${e.toString()}');
     }
   }
 }

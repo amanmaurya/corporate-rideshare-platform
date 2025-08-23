@@ -15,15 +15,13 @@ class AppConstants {
   // Endpoints
   static String get authEndpoint => '$apiBaseUrl/auth';
   static String get ridesEndpoint => '$apiBaseUrl/rides';
-  static String get paymentsEndpoint => '$apiBaseUrl/payments';
-  static String get notificationsEndpoint => '$apiBaseUrl/notifications';
-  static String get websocketEndpoint => '$baseUrl/websocket';
+  static String get companiesEndpoint => '$apiBaseUrl/companies';
+  static String get usersEndpoint => '$apiBaseUrl/users';
 
   // Storage Keys
   static const String tokenKey = 'auth_token';
   static const String userKey = 'user_data';
   static const String companyKey = 'company_data';
-  static const String settingsKey = 'app_settings';
 
   // Map Configuration
   static const double defaultLatitude = 37.7749;
@@ -34,15 +32,6 @@ class AppConstants {
   static const int maxPassengers = 6;
   static const double maxSearchRadius = 10.0; // km
   static const int requestTimeoutSeconds = 30;
-  
-  // Payment Configuration
-  static const double maxPaymentAmount = 1000.0; // USD
-  static const String defaultCurrency = 'USD';
-  static const int paymentTimeoutSeconds = 60;
-  
-  // WebSocket Configuration
-  static const int websocketReconnectDelay = 5; // seconds
-  static const int websocketHeartbeatInterval = 30; // seconds
   
   // Debug info
   static String get debugInfo => 'Platform: ${kIsWeb ? 'Web' : Platform.operatingSystem}, API: $baseUrl';
@@ -59,10 +48,5 @@ class AppColors {
   static const warningColor = Color(0xFFFF9800);
   static const textPrimaryColor = Color(0xFF212121);
   static const textSecondaryColor = Color(0xFF757575);
-  
-  // Payment status colors
-  static const paymentCompletedColor = Color(0xFF4CAF50);
-  static const paymentPendingColor = Color(0xFFFF9800);
-  static const paymentFailedColor = Color(0xFFF44336);
-  static const paymentRefundedColor = Color(0xFF2196F3);
+  static const info = Color(0xFF2196F3);
 }

@@ -1,1 +1,16 @@
-requests==2.31.0
+# Test Requirements for Corporate RideShare Platform
+# Install with: pip install -r test_requirements.txt
+
+# HTTP requests for API testing
+requests>=2.31.0
+
+# JSON handling
+jsonschema>=4.19.0
+
+# Date/time handling
+python-dateutil>=2.8.2
+
+# Optional: For more advanced testing
+# pytest>=7.4.0
+# pytest-asyncio>=0.21.0
+# pytest-cov>=4.1.0

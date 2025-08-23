@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../models/company.dart';
-import '../../services/api_service.dart';
+import '../../services/company_service.dart';
 import '../../utils/constants.dart';
+import '../home/home_screen.dart';
 
 class CompanySelectionScreen extends StatefulWidget {
   const CompanySelectionScreen({Key? key}) : super(key: key);
@@ -28,31 +29,13 @@ class _CompanySelectionScreenState extends State<CompanySelectionScreen> {
         error = null;
       });
 
-      // For demo purposes, create sample companies
-      // In production, this would come from the API
-      companies = [
-        Company(
-          id: 'company-1',
-          name: 'TechCorp Inc.',
-          address: '123 Innovation Drive, Tech City',
-          contactEmail: 'admin@techcorp.com',
-          contactPhone: '+1-555-0123',
-        ),
-        Company(
-          id: 'company-2',
-          name: 'Innovate Solutions',
-          address: '456 Business Ave, Startup City',
-          contactEmail: 'info@innovate.com',
-          contactPhone: '+1-555-0456',
-        ),
-        Company(
-          id: 'company-3',
-          name: 'Global Enterprises',
-          address: '789 Corporate Blvd, Metro City',
-          contactEmail: 'contact@global.com',
-          contactPhone: '+1-555-0789',
-        ),
-      ];
+      // Try to load companies from API first
+      try {
+        companies = await CompanyService.getCompanies();
+      } catch (e) {
+        // If API fails, fall back to demo companies
+        companies = await CompanyService.getDemoCompanies();
+      }
 
       setState(() {
         isLoading = false;
@@ -68,7 +51,7 @@ class _CompanySelectionScreenState extends State<CompanySelectionScreen> {
   void _selectCompany(Company company) {
     Navigator.pushNamed(
       context,
-      AppRoutes.login,
+      '/login',
       arguments: company,
     );
   }
@@ -165,7 +148,7 @@ class _CompanySelectionScreenState extends State<CompanySelectionScreen> {
                                           style: const TextStyle(
                                             fontSize: 18,
                                             fontWeight: FontWeight.bold,
-                                            color: AppColors.textColor,
+                                            color: AppColors.textPrimaryColor,
                                           ),
                                         ),
                                         const SizedBox(height: 4),
@@ -232,30 +215,4 @@ class _CompanySelectionScreenState extends State<CompanySelectionScreen> {
                 ),
     );
   }
-}
-
-class Company {
-  final String id;
-  final String name;
-  final String address;
-  final String contactEmail;
-  final String contactPhone;
-
-  Company({
-    required this.id,
-    required this.name,
-    required this.address,
-    required this.contactEmail,
-    required this.contactPhone,
-  });
-}
-
-class AppRoutes {
-  static const String login = '/login';
-}
-
-class AppColors {
-  static const Color primaryColor = Color(0xFF2196F3);
-  static const Color backgroundColor = Color(0xFFF5F5F5);
-  static const Color textColor = Color(0xFF333333);
 }

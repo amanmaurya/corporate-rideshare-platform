@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Body
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
+from pydantic import BaseModel
 from app.database import get_database
 from app.models.ride import Ride, RideRequest
 from app.models.user import User
@@ -10,8 +11,6 @@ from app.schemas.ride import RideCreate, RideUpdate, RideResponse, RideRequestCr
 from app.services.auth import verify_token
 from app.services.ride_matching import RideMatchingService
 from app.services.location import location_service
-from app.services.notification_service import notification_service
-from app.services.websocket_service import websocket_service
 
 router = APIRouter()
 security = HTTPBearer()
@@ -67,22 +66,6 @@ async def create_ride(ride: RideCreate, current_user: User = Depends(get_current
     db.add(db_ride)
     db.commit()
     db.refresh(db_ride)
-
-    # Send real-time update via WebSocket
-    try:
-        await websocket_service.manager.broadcast_ride_update({
-            "id": db_ride.id,
-            "type": "ride_created",
-            "pickup_location": db_ride.pickup_location,
-            "destination": db_ride.destination,
-            "scheduled_time": db_ride.scheduled_time.isoformat() if db_ride.scheduled_time else None,
-            "max_passengers": db_ride.max_passengers,
-            "current_passengers": db_ride.current_passengers,
-            "status": db_ride.status
-        }, current_user.company_id, exclude_user=current_user.id)
-    except Exception as e:
-        # Log error but don't fail the ride creation
-        print(f"WebSocket broadcast failed: {e}")
 
     return db_ride
 
@@ -148,17 +131,6 @@ async def update_ride(ride_id: str, ride_update: RideUpdate,
     db.commit()
     db.refresh(ride)
 
-    # Send real-time update
-    try:
-        await websocket_service.manager.broadcast_ride_update({
-            "id": ride.id,
-            "type": "ride_updated",
-            "status": ride.status,
-            "updated_at": ride.updated_at.isoformat() if ride.updated_at else None
-        }, current_user.company_id)
-    except Exception as e:
-        print(f"WebSocket broadcast failed: {e}")
-
     return ride
 
 @router.delete("/{ride_id}")
@@ -178,15 +150,6 @@ async def delete_ride(ride_id: str, current_user: User = Depends(get_current_use
 
     db.delete(ride)
     db.commit()
-
-    # Send real-time update
-    try:
-        await websocket_service.manager.broadcast_ride_update({
-            "id": ride_id,
-            "type": "ride_deleted"
-        }, current_user.company_id)
-    except Exception as e:
-        print(f"WebSocket broadcast failed: {e}")
 
     return {"message": "Ride deleted successfully"}
 
@@ -261,51 +224,43 @@ async def request_ride(ride_id: str, request_data: RideRequestCreate,
     db.commit()
     db.refresh(ride_request)
 
-    # Send notification to ride creator
-    try:
-        notification_service.notify_ride_request(
-            ride_id=ride_id,
-            rider_id=current_user.id,
-            driver_id=ride.rider_id,
-            company_id=current_user.company_id,
-            pickup_location=ride.pickup_location,
-            destination=ride.destination
-        )
-    except Exception as e:
-        print(f"Notification failed: {e}")
-
-    # Send real-time update
-    try:
-        await websocket_service.manager.broadcast_ride_request({
-            "ride_id": ride_id,
-            "user_id": current_user.id,
-            "user_name": current_user.name,
-            "message": request_data.message,
-            "timestamp": datetime.utcnow().isoformat()
-        }, current_user.company_id)
-    except Exception as e:
-        print(f"WebSocket broadcast failed: {e}")
-
     return ride_request
 
+class AcceptRequestData(BaseModel):
+    request_id: str
+
 @router.post("/{ride_id}/accept")
-async def accept_ride_request(ride_id: str, request_id: str, 
+async def accept_ride_request(ride_id: str, 
+                            request_data: AcceptRequestData = Body(...),
                             current_user: User = Depends(get_current_user), 
                             db: Session = Depends(get_database)):
-    """Accept a ride request (for ride creator)"""
+    """Accept a ride request (for ride creator or assigned driver)"""
     ride = db.query(Ride).filter(
         Ride.id == ride_id,
-        Ride.rider_id == current_user.id
+        Ride.company_id == current_user.company_id
     ).first()
 
     if not ride:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Ride not found or not authorized"
+            detail="Ride not found"
+        )
+
+    # Check if user is authorized to accept requests for this ride
+    # User can accept if they are:
+    # 1. Ride creator (rider)
+    # 2. Assigned driver for this ride
+    # 3. Admin
+    if (ride.rider_id != current_user.id and 
+        ride.driver_id != current_user.id and 
+        current_user.role != "admin"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to accept requests for this ride"
         )
 
     ride_request = db.query(RideRequest).filter(
-        RideRequest.id == request_id,
+        RideRequest.id == request_data.request_id,
         RideRequest.ride_id == ride_id
     ).first()
 
@@ -320,19 +275,173 @@ async def accept_ride_request(ride_id: str, request_id: str,
     ride.current_passengers += 1
     db.commit()
 
-    # Send notification to requester
-    try:
-        notification_service.notify_ride_accepted(
-            ride_id=ride_id,
-            rider_id=ride_request.user_id,
-            driver_id=current_user.id,
-            company_id=current_user.company_id,
-            driver_name=current_user.name
-        )
-    except Exception as e:
-        print(f"Notification failed: {e}")
-
     return {"message": "Ride request accepted"}
+
+@router.post("/{ride_id}/reject")
+async def reject_ride_request(ride_id: str,
+                            request_data: AcceptRequestData = Body(...),
+                            current_user: User = Depends(get_current_user),
+                            db: Session = Depends(get_database)):
+    """Reject a ride request (for ride creator or assigned driver)"""
+    ride = db.query(Ride).filter(
+        Ride.id == ride_id,
+        Ride.company_id == current_user.company_id
+    ).first()
+
+    if not ride:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Ride not found"
+        )
+
+    # Check if user is authorized to reject requests for this ride
+    # User can reject if they are:
+    # 1. Ride creator (rider)
+    # 2. Assigned driver for this ride
+    # 3. Admin
+    if (ride.rider_id != current_user.id and 
+        ride.driver_id != current_user.id and 
+        current_user.role != "admin"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to reject requests for this ride"
+        )
+
+    ride_request = db.query(RideRequest).filter(
+        RideRequest.id == request_data.request_id,
+        RideRequest.ride_id == ride_id
+    ).first()
+
+    if not ride_request:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Ride request not found"
+        )
+
+    # Reject the request
+    ride_request.status = "declined"
+    db.commit()
+
+    return {"message": "Ride request rejected"}
+
+@router.delete("/requests/{request_id}")
+async def cancel_ride_request(request_id: str,
+                            current_user: User = Depends(get_current_user),
+                            db: Session = Depends(get_database)):
+    """Cancel a ride request (only the requester can cancel)"""
+    ride_request = db.query(RideRequest).filter(
+        RideRequest.id == request_id,
+        RideRequest.user_id == current_user.id  # Only the requester can cancel
+    ).first()
+
+    if not ride_request:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Ride request not found or not authorized"
+        )
+
+    # Check if the request can be cancelled
+    if ride_request.status not in ['pending']:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot cancel request with status: ${ride_request.status}"
+        )
+
+    # Delete the request
+    db.delete(ride_request)
+    db.commit()
+
+    return {"message": "Ride request cancelled successfully"}
+
+@router.post("/{ride_id}/accept-passenger")
+async def accept_passenger_request(ride_id: str, 
+                                 request_data: AcceptRequestData = Body(...),
+                                 current_user: User = Depends(get_current_user), 
+                                 db: Session = Depends(get_database)):
+    """Accept a passenger request (for assigned drivers)"""
+    ride = db.query(Ride).filter(
+        Ride.id == ride_id,
+        Ride.company_id == current_user.company_id
+    ).first()
+
+    if not ride:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Ride not found"
+        )
+
+    # Check if user is the assigned driver for this ride
+    if ride.driver_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only assigned drivers can accept passenger requests"
+        )
+
+    ride_request = db.query(RideRequest).filter(
+        RideRequest.id == request_data.request_id,
+        RideRequest.ride_id == ride_id,
+        RideRequest.status == "pending"  # Only accept pending requests
+    ).first()
+
+    if not ride_request:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Ride request not found or not pending"
+        )
+
+    # Accept the passenger request
+    ride_request.status = "accepted"
+    ride.current_passengers += 1
+    db.commit()
+
+    return {"message": "Passenger request accepted"}
+
+@router.post("/{ride_id}/reject-passenger")
+async def reject_passenger_request(ride_id: str,
+                                request_data: AcceptRequestData = Body(...),
+                                current_user: User = Depends(get_current_user),
+                                db: Session = Depends(get_database)):
+    """Reject a passenger request (for ride creators or assigned drivers)"""
+    ride = db.query(Ride).filter(
+        Ride.id == ride_id,
+        Ride.company_id == current_user.company_id
+    ).first()
+
+    if not ride:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Ride not found"
+        )
+
+    # Check if user is authorized to reject passenger requests for this ride
+    # User can reject if they are:
+    # 1. Ride creator (rider)
+    # 2. Assigned driver for this ride
+    # 3. Admin
+    if (ride.rider_id != current_user.id and 
+        ride.driver_id != current_user.id and 
+        current_user.role != "admin"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to reject passenger requests for this ride"
+        )
+
+    ride_request = db.query(RideRequest).filter(
+        RideRequest.id == request_data.request_id,
+        RideRequest.ride_id == ride_id
+    ).first()
+
+    if not ride_request:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Ride request not found"
+        )
+
+    # Reject the request
+    ride_request.status = "declined"
+    db.commit()
+
+    return {"message": "Passenger request rejected"}
 
 @router.post("/{ride_id}/start")
 async def start_ride(ride_id: str, current_user: User = Depends(get_current_user), 
@@ -340,7 +449,7 @@ async def start_ride(ride_id: str, current_user: User = Depends(get_current_user
     """Start a ride (for ride creator)"""
     ride = db.query(Ride).filter(
         Ride.id == ride_id,
-        Ride.rider_id == current_user.id
+        Ride.company_id == current_user.company_id
     ).first()
 
     if not ride:
@@ -349,33 +458,15 @@ async def start_ride(ride_id: str, current_user: User = Depends(get_current_user
             detail="Ride not found or not authorized"
         )
 
-    if ride.status != "matched":
+    if ride.status != "assigned":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Ride must be matched before starting"
+            detail="Ride must be assigned to a driver before starting"
         )
 
     ride.status = "in_progress"
     ride.actual_start_time = datetime.utcnow()
     db.commit()
-
-    # Send notification to passengers
-    try:
-        # Get all accepted ride requests
-        accepted_requests = db.query(RideRequest).filter(
-            RideRequest.ride_id == ride_id,
-            RideRequest.status == "accepted"
-        ).all()
-        
-        for request in accepted_requests:
-            notification_service.notify_ride_started(
-                ride_id=ride_id,
-                rider_id=request.user_id,
-                driver_id=current_user.id,
-                company_id=current_user.company_id
-            )
-    except Exception as e:
-        print(f"Notification failed: {e}")
 
     return {"message": "Ride started successfully"}
 
@@ -385,7 +476,7 @@ async def complete_ride(ride_id: str, current_user: User = Depends(get_current_u
     """Complete a ride (for ride creator)"""
     ride = db.query(Ride).filter(
         Ride.id == ride_id,
-        Ride.rider_id == current_user.id
+        Ride.company_id == current_user.company_id
     ).first()
 
     if not ride:
@@ -402,86 +493,15 @@ async def complete_ride(ride_id: str, current_user: User = Depends(get_current_u
 
     ride.status = "completed"
     ride.actual_end_time = datetime.utcnow()
-    
-    # Calculate actual fare based on distance
-    actual_distance = location_service.calculate_distance(
-        ride.pickup_latitude, ride.pickup_longitude,
-        ride.destination_latitude, ride.destination_longitude
-    )
-    ride.actual_fare = location_service.calculate_fare(actual_distance)
-    
     db.commit()
 
-    # Send notification to passengers
-    try:
-        accepted_requests = db.query(RideRequest).filter(
-            RideRequest.ride_id == ride_id,
-            RideRequest.status == "accepted"
-        ).all()
-        
-        for request in accepted_requests:
-            notification_service.notify_ride_completed(
-                ride_id=ride_id,
-                rider_id=request.user_id,
-                driver_id=current_user.id,
-                company_id=current_user.company_id,
-                fare=ride.actual_fare
-            )
-    except Exception as e:
-        print(f"Notification failed: {e}")
+    return {"message": "Ride completed successfully"}
 
-    return {"message": "Ride completed successfully", "fare": ride.actual_fare}
-
-@router.get("/nearby/drivers")
-async def find_nearby_drivers(current_user: User = Depends(get_current_user), 
-                             db: Session = Depends(get_database),
-                             latitude: float = None,
-                             longitude: float = None,
-                             radius_km: float = 5.0):
-    """Find nearby available drivers"""
-    if not latitude or not longitude:
-        # Use user's current location
-        latitude = current_user.latitude
-        longitude = current_user.longitude
-
-    # Get all drivers in the company
-    drivers = db.query(User).filter(
-        User.company_id == current_user.company_id,
-        User.is_driver == True,
-        User.is_active == True
-    ).all()
-
-    # Convert to list of dicts for location service
-    driver_points = []
-    for driver in drivers:
-        if driver.latitude and driver.longitude:
-            driver_points.append({
-                "id": driver.id,
-                "name": driver.name,
-                "latitude": driver.latitude,
-                "longitude": driver.longitude,
-                "rating": driver.rating,
-                "is_available": True  # This should come from driver status
-            })
-
-    # Find nearby drivers
-    nearby_drivers = location_service.find_nearby_points(
-        latitude, longitude, driver_points, radius_km
-    )
-
-    return {
-        "nearby_drivers": nearby_drivers,
-        "search_center": {"latitude": latitude, "longitude": longitude},
-        "search_radius_km": radius_km
-    }
-
-@router.post("/{ride_id}/update-location")
-async def update_ride_location(ride_id: str, 
-                             latitude: float, 
-                             longitude: float,
+@router.post("/{ride_id}/offer-driving")
+async def offer_to_drive_ride(ride_id: str, 
                              current_user: User = Depends(get_current_user), 
                              db: Session = Depends(get_database)):
-    """Update current location during a ride"""
+    """Allow a driver to offer to drive a ride"""
     ride = db.query(Ride).filter(
         Ride.id == ride_id,
         Ride.company_id == current_user.company_id
@@ -493,25 +513,166 @@ async def update_ride_location(ride_id: str,
             detail="Ride not found"
         )
 
-    # Update user's location
-    current_user.latitude = latitude
-    current_user.longitude = longitude
-    current_user.updated_at = datetime.utcnow()
-    db.commit()
-
-    # Send real-time location update
-    try:
-        await websocket_service.manager.broadcast_location_update(
-            current_user.id,
-            {
-                "ride_id": ride_id,
-                "latitude": latitude,
-                "longitude": longitude,
-                "timestamp": datetime.utcnow().isoformat()
-            },
-            current_user.company_id
+    # Check if user is a driver
+    if not current_user.is_driver:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only drivers can offer to drive rides"
         )
-    except Exception as e:
-        print(f"WebSocket broadcast failed: {e}")
 
-    return {"message": "Location updated successfully"}
+    # Check if ride already has a driver
+    if ride.driver_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Ride already has a driver assigned"
+        )
+
+    # Check if user is trying to drive their own ride
+    if ride.rider_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot drive your own ride"
+        )
+
+    # Create a driver offer (similar to ride request but for drivers)
+    driver_offer = RideRequest(
+        ride_id=ride_id,
+        user_id=current_user.id,
+        status="driver_offer",
+        message="Driver offering to drive this ride"
+    )
+
+    db.add(driver_offer)
+    db.commit()
+    db.refresh(driver_offer)
+
+    return {"message": "Driver offer submitted successfully", "offer_id": driver_offer.id}
+
+@router.post("/{ride_id}/assign-driver")
+async def assign_driver_to_ride(ride_id: str, 
+                               driver_id: str,
+                               current_user: User = Depends(get_current_user), 
+                               db: Session = Depends(get_database)):
+    """Assign a driver to a ride (admin or ride creator only)"""
+    ride = db.query(Ride).filter(
+        Ride.id == ride_id,
+        Ride.company_id == current_user.company_id
+    ).first()
+
+    if not ride:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Ride not found"
+        )
+
+    # Only ride creator or admin can assign drivers
+    if ride.rider_id != current_user.id and current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to assign drivers"
+        )
+
+    # Verify driver exists and is a driver
+    driver = db.query(User).filter(
+        User.id == driver_id,
+        User.company_id == current_user.company_id,
+        User.is_driver == True,
+        User.is_active == True
+    ).first()
+
+    if not driver:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Driver not found or not available"
+        )
+
+    # Check if driver has offered to drive this ride
+    driver_offer = db.query(RideRequest).filter(
+        RideRequest.ride_id == ride_id,
+        RideRequest.user_id == driver_id,
+        RideRequest.status == "driver_offer"
+    ).first()
+
+    if not driver_offer:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Driver must offer to drive before being assigned"
+        )
+
+    # Update ride with driver assignment
+    ride.driver_id = driver_id
+    ride.status = "assigned"
+    ride.updated_at = datetime.utcnow()
+    
+    # Update driver offer status
+    driver_offer.status = "accepted"
+    driver_offer.updated_at = datetime.utcnow()
+    
+    db.commit()
+    db.refresh(ride)
+
+    return {"message": f"Driver {driver.name} assigned to ride successfully"}
+
+@router.get("/{ride_id}/requests", response_model=List[RideRequestResponse])
+async def get_ride_requests(ride_id: str, current_user: User = Depends(get_current_user), 
+                           db: Session = Depends(get_database)):
+    """Get all requests for a specific ride (only for users who can manage them)"""
+    ride = db.query(Ride).filter(
+        Ride.id == ride_id,
+        Ride.company_id == current_user.company_id
+    ).first()
+
+    if not ride:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Ride not found"
+        )
+
+    # Restrictive authorization: Only show requests to users who can actually manage them
+    # 1. Ride creator (rider) - can see and manage all requests
+    # 2. Assigned driver - can see and manage passenger requests
+    # 3. Admin - can see and manage all requests
+    can_manage_requests = (
+        ride.rider_id == current_user.id or  # Ride creator
+        ride.driver_id == current_user.id or  # Assigned driver
+        current_user.role == "admin"          # Admin
+    )
+
+    if not can_manage_requests:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to view or manage ride requests"
+        )
+
+    # Get all requests for this ride
+    requests = db.query(RideRequest).filter(RideRequest.ride_id == ride_id).all()
+    return requests
+
+@router.get("/{ride_id}/my-request")
+async def get_my_ride_request(ride_id: str, current_user: User = Depends(get_current_user), 
+                             db: Session = Depends(get_database)):
+    """Get the current user's request status for a specific ride"""
+    ride = db.query(Ride).filter(
+        Ride.id == ride_id,
+        Ride.company_id == current_user.company_id
+    ).first()
+
+    if not ride:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Ride not found"
+        )
+
+    # Find the user's request for this ride
+    user_request = db.query(RideRequest).filter(
+        RideRequest.ride_id == ride_id,
+        RideRequest.user_id == current_user.id
+    ).first()
+
+    if not user_request:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="You have not requested this ride"
+        )
+
+    return user_request

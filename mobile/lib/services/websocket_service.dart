@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:async';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:web_socket_channel/status.dart' as status;
-import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/constants.dart';
 import '../models/websocket_message.dart';
 import 'package:flutter/foundation.dart';
@@ -14,7 +13,6 @@ class WebSocketService {
   Timer? _reconnectTimer;
   bool _isConnected = false;
   String? _currentUserId;
-  String? _currentCompanyId;
   
   // Singleton pattern
   static WebSocketService get instance {
@@ -28,21 +26,16 @@ class WebSocketService {
   bool get isConnected => _isConnected;
   Stream<WebSocketMessage>? get messageStream => _messageController?.stream;
   
-  /// Connect to WebSocket server using JWT token
-  Future<void> connect() async {
-    if (_isConnected) return;
+  /// Connect to WebSocket server
+  Future<void> connect(String userId) async {
+    if (_isConnected && _currentUserId == userId) return;
+    
+    _currentUserId = userId;
+    _disconnect(); // Close existing connection
     
     try {
-      // Get JWT token from shared preferences
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString(AppConstants.tokenKey);
-      
-      if (token == null) {
-        throw Exception('No authentication token found');
-      }
-      
       final wsUrl = AppConstants.baseUrl.replaceFirst('http', 'ws');
-      final uri = Uri.parse('$wsUrl/api/v1/websocket/ws/$token');
+      final uri = Uri.parse('$wsUrl/api/v1/websocket/ws/$userId');
       
       _channel = WebSocketChannel.connect(uri);
       _messageController = StreamController<WebSocketMessage>.broadcast();
@@ -55,7 +48,7 @@ class WebSocketService {
       );
       
       _isConnected = true;
-      print('🔌 WebSocket connected successfully');
+      print('🔌 WebSocket connected for user: $userId');
       
     } catch (e) {
       print('❌ WebSocket connection failed: $e');
@@ -71,7 +64,6 @@ class WebSocketService {
     _messageController = null;
     _isConnected = false;
     _currentUserId = null;
-    _currentCompanyId = null;
     
     if (_reconnectTimer != null) {
       _reconnectTimer!.cancel();
@@ -128,37 +120,29 @@ class WebSocketService {
     if (_reconnectTimer != null) return;
     
     _reconnectTimer = Timer(const Duration(seconds: 5), () {
-      if (!_isConnected) {
+      if (_currentUserId != null && !_isConnected) {
         print('🔄 Attempting WebSocket reconnection...');
-        connect();
+        connect(_currentUserId!);
       }
     });
-  }
-  
-  /// Send ping message to keep connection alive
-  Future<void> sendPing() async {
-    final message = WebSocketMessage(
-      type: 'ping',
-      data: {
-        'timestamp': DateTime.now().toIso8601String(),
-      },
-    );
-    
-    await sendMessage(message);
   }
   
   /// Send location update
   Future<void> updateLocation({
     required double latitude,
     required double longitude,
-    required String rideId,
+    required String companyId,
+    bool isDriver = false,
+    bool isAvailable = true,
   }) async {
     final message = WebSocketMessage(
       type: 'location_update',
       data: {
-        'ride_id': rideId,
         'latitude': latitude,
         'longitude': longitude,
+        'company_id': companyId,
+        'is_driver': isDriver,
+        'is_available': isAvailable,
         'timestamp': DateTime.now().toIso8601String(),
       },
     );
@@ -166,51 +150,66 @@ class WebSocketService {
     await sendMessage(message);
   }
   
-  /// Send ride status update
-  Future<void> updateRideStatus({
+  /// Send ride request
+  Future<void> sendRideRequest({
     required String rideId,
-    required String status,
-    Map<String, dynamic>? additionalData,
+    required Map<String, dynamic> rideData,
   }) async {
-    final messageData = {
-      'ride_id': rideId,
-      'status': status,
-      'timestamp': DateTime.now().toIso8601String(),
-    };
-    
-    if (additionalData != null) {
-      messageData.addAll(additionalData);
-    }
-    
     final message = WebSocketMessage(
-      type: 'ride_status',
-      data: messageData,
+      type: 'ride_request',
+      data: {
+        'ride_id': rideId,
+        ...rideData,
+        'timestamp': DateTime.now().toIso8601String(),
+      },
     );
     
     await sendMessage(message);
   }
   
-  /// Listen for specific message types
-  Stream<WebSocketMessage> listenToMessageType(String messageType) {
-    return messageStream?.where((message) => message.type == messageType) ?? 
-           Stream.empty();
+  /// Send ride response (accept/decline)
+  Future<void> sendRideResponse({
+    required String rideId,
+    required String response, // 'accept' or 'decline'
+    String? message,
+    String? driverName,
+    String? estimatedArrival,
+  }) async {
+    final messageData = {
+      'ride_id': rideId,
+      'response': response,
+      'timestamp': DateTime.now().toIso8601String(),
+    };
+    
+    if (message != null) messageData['message'] = message;
+    if (driverName != null) messageData['driver_name'] = driverName;
+    if (estimatedArrival != null) messageData['estimated_arrival'] = estimatedArrival;
+    
+    final wsMessage = WebSocketMessage(
+      type: 'ride_response',
+      data: messageData,
+    );
+    
+    await sendMessage(wsMessage);
   }
   
-  /// Listen for ride updates
-  Stream<WebSocketMessage> get rideUpdates => 
-      listenToMessageType('ride_update');
-  
-  /// Listen for ride requests
-  Stream<WebSocketMessage> get rideRequests => 
-      listenToMessageType('ride_request');
-  
-  /// Listen for location updates
-  Stream<WebSocketMessage> get locationUpdates => 
-      listenToMessageType('location_update');
-  
-  /// Listen for notifications
-  Stream<WebSocketMessage> get notifications => 
-      listenToMessageType('notification');
+  /// Update driver status
+  Future<void> updateDriverStatus({
+    required bool isAvailable,
+    String? reason,
+  }) async {
+    final message = WebSocketMessage(
+      type: 'driver_status',
+      data: {
+        'is_available': isAvailable,
+        'timestamp': DateTime.now().toIso8601String(),
+      },
+    );
+    
+    if (reason != null) message.data['reason'] = reason;
+    
+    await sendMessage(message);
+  }
   
   /// Disconnect and cleanup
   void disconnect() {
@@ -223,19 +222,7 @@ class WebSocketService {
     return {
       'is_connected': _isConnected,
       'user_id': _currentUserId,
-      'company_id': _currentCompanyId,
       'has_message_stream': _messageController != null,
     };
-  }
-  
-  /// Start heartbeat to keep connection alive
-  void startHeartbeat() {
-    Timer.periodic(const Duration(seconds: 30), (timer) {
-      if (_isConnected) {
-        sendPing();
-      } else {
-        timer.cancel();
-      }
-    });
   }
 }

@@ -1,8 +1,8 @@
-// Corporate RideShare Admin Dashboard JavaScript
+// Corporate RideShare Platform - Admin Dashboard JavaScript
 
 class AdminDashboard {
     constructor() {
-        this.apiBaseUrl = '/api/v1';
+        this.authToken = null;
         this.currentUser = null;
         this.init();
     }
@@ -11,476 +11,212 @@ class AdminDashboard {
         await this.checkAuth();
         this.setupEventListeners();
         this.loadDashboardData();
-        this.startAutoRefresh();
     }
 
     async checkAuth() {
+        // Check if user is already authenticated
         const token = localStorage.getItem('admin_token');
-        if (!token) {
-            this.showLoginForm();
-            return;
-        }
-
-        try {
-            const response = await fetch(`${this.apiBaseUrl}/auth/me`, {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
-
-            if (response.ok) {
-                this.currentUser = await response.json();
-                this.hideLoginForm();
-                this.updateUserInfo();
-            } else {
-                localStorage.removeItem('admin_token');
+        if (token) {
+            this.authToken = token;
+            try {
+                await this.loadCurrentUser();
+                this.showAuthenticatedUI();
+            } catch (error) {
                 this.showLoginForm();
             }
-        } catch (error) {
-            console.error('Auth check failed:', error);
+        } else {
             this.showLoginForm();
         }
     }
 
-    showLoginForm() {
-        const mainContent = document.querySelector('main');
-        mainContent.innerHTML = `
-            <div class="d-flex justify-content-center align-items-center" style="height: 80vh;">
-                <div class="card" style="width: 400px;">
-                    <div class="card-header text-center">
-                        <h4>Admin Login</h4>
-                    </div>
-                    <div class="card-body">
-                        <form id="loginForm">
-                            <div class="mb-3">
-                                <label for="email" class="form-label">Email</label>
-                                <input type="email" class="form-control" id="email" required>
-                            </div>
-                            <div class="mb-3">
-                                <label for="password" class="form-label">Password</label>
-                                <input type="password" class="form-control" id="password" required>
-                            </div>
-                            <div class="mb-3">
-                                <label for="companyId" class="form-label">Company ID</label>
-                                <input type="text" class="form-control" id="companyId" value="company-1" required>
-                            </div>
-                            <button type="submit" class="btn btn-primary w-100">Login</button>
-                        </form>
-                    </div>
-                </div>
-            </div>
-        `;
-
-        document.getElementById('loginForm').addEventListener('submit', (e) => {
-            e.preventDefault();
-            this.handleLogin();
+    setupEventListeners() {
+        // Navigation
+        document.querySelectorAll('.nav-link').forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                const target = e.target.getAttribute('href').substring(1);
+                this.showSection(target);
+            });
         });
-    }
 
-    hideLoginForm() {
-        this.loadMainDashboard();
+        // Login form
+        const loginForm = document.getElementById('login-form');
+        if (loginForm) {
+            loginForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                this.handleLogin();
+            });
+        }
+
+        // Logout
+        const logoutBtn = document.getElementById('logout-btn');
+        if (logoutBtn) {
+            logoutBtn.addEventListener('click', () => {
+                this.handleLogout();
+            });
+        }
     }
 
     async handleLogin() {
         const email = document.getElementById('email').value;
         const password = document.getElementById('password').value;
-        const companyId = document.getElementById('companyId').value;
+        const companyId = document.getElementById('company-id').value;
 
         try {
-            const response = await fetch(`${this.apiBaseUrl}/auth/login`, {
+            const response = await fetch('/api/v1/auth/login', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ email, password, company_id: companyId })
+                body: JSON.stringify({ email, password, company_id: companyId }),
             });
 
             if (response.ok) {
                 const data = await response.json();
-                localStorage.setItem('admin_token', data.access_token);
+                this.authToken = data.access_token;
                 this.currentUser = data.user;
-                this.hideLoginForm();
-                this.updateUserInfo();
+                
+                localStorage.setItem('admin_token', this.authToken);
+                this.showAuthenticatedUI();
+                this.loadDashboardData();
             } else {
                 const error = await response.json();
-                this.showAlert('Login failed: ' + error.detail, 'danger');
+                this.showError(error.detail || 'Login failed');
             }
         } catch (error) {
-            console.error('Login failed:', error);
-            this.showAlert('Login failed. Please try again.', 'danger');
+            this.showError('Login failed: ' + error.message);
         }
     }
 
-    loadMainDashboard() {
-        const mainContent = document.querySelector('main');
-        mainContent.innerHTML = `
-            <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-                <h1 class="h2">Dashboard</h1>
-                <div class="btn-toolbar mb-2 mb-md-0">
-                    <div class="btn-group me-2">
-                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="adminDashboard.exportData()">Export</button>
-                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="adminDashboard.refreshData()">Refresh</button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Stats Cards -->
-            <div class="row mb-4" id="statsCards">
-                <!-- Stats will be loaded here -->
-            </div>
-
-            <!-- Recent Activity -->
-            <div class="row mt-4">
-                <div class="col-12">
-                    <div class="card">
-                        <div class="card-header">
-                            <h5>Recent Activity</h5>
-                        </div>
-                        <div class="card-body">
-                            <div class="table-responsive">
-                                <table class="table table-striped">
-                                    <thead>
-                                        <tr>
-                                            <th>Time</th>
-                                            <th>Activity</th>
-                                            <th>User</th>
-                                            <th>Company</th>
-                                            <th>Status</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="activity-table">
-                                        <!-- Activity data will be loaded here -->
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Charts Section -->
-            <div class="row mt-4">
-                <div class="col-md-6">
-                    <div class="card">
-                        <div class="card-header">
-                            <h5>Ride Statistics</h5>
-                        </div>
-                        <div class="card-body">
-                            <canvas id="rideChart" width="400" height="200"></canvas>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-6">
-                    <div class="card">
-                        <div class="card-header">
-                            <h5>User Activity</h5>
-                        </div>
-                        <div class="card-body">
-                            <canvas id="userChart" width="400" height="200"></canvas>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
+    async handleLogout() {
+        this.authToken = null;
+        this.currentUser = null;
+        localStorage.removeItem('admin_token');
+        this.showLoginForm();
     }
 
-    updateUserInfo() {
-        if (this.currentUser) {
-            const userInfo = document.querySelector('.text-primary');
-            if (userInfo) {
-                userInfo.textContent = `Welcome, ${this.currentUser.name}`;
-            }
-        }
-    }
-
-    setupEventListeners() {
-        // Navigation event listeners
-        document.addEventListener('click', (e) => {
-            if (e.target.matches('.nav-link')) {
-                e.preventDefault();
-                const target = e.target.getAttribute('href').substring(1);
-                this.navigateToSection(target);
-            }
+    async loadCurrentUser() {
+        const response = await fetch('/api/v1/auth/me', {
+            headers: {
+                'Authorization': `Bearer ${this.authToken}`,
+            },
         });
-    }
 
-    navigateToSection(section) {
-        // Remove active class from all nav links
-        document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active'));
-        
-        // Add active class to clicked link
-        document.querySelector(`[href="#${section}"]`).classList.add('active');
-
-        // Load section content
-        switch (section) {
-            case 'dashboard':
-                this.loadDashboardData();
-                break;
-            case 'companies':
-                this.loadCompaniesData();
-                break;
-            case 'users':
-                this.loadUsersData();
-                break;
-            case 'rides':
-                this.loadRidesData();
-                break;
-            case 'analytics':
-                this.loadAnalyticsData();
-                break;
+        if (!response.ok) {
+            throw new Error('Failed to load user');
         }
+
+        this.currentUser = await response.json();
     }
 
     async loadDashboardData() {
-        try {
-            const [companies, users, rides, payments] = await Promise.all([
-                this.fetchData('companies'),
-                this.fetchData('users'),
-                this.fetchData('rides'),
-                this.fetchData('payments/company/summary')
-            ]);
+        if (!this.authToken) return;
 
-            this.updateStatsCards(companies, users, rides, payments);
-            this.updateActivityTable(rides);
-            this.updateCharts(rides, users);
+        try {
+            await Promise.all([
+                this.loadCompanies(),
+                this.loadUsers(),
+                this.loadRides(),
+                this.loadStats(),
+            ]);
         } catch (error) {
             console.error('Failed to load dashboard data:', error);
-            this.showAlert('Failed to load dashboard data', 'danger');
         }
     }
 
-    async fetchData(endpoint) {
-        const token = localStorage.getItem('admin_token');
-        const response = await fetch(`${this.apiBaseUrl}/${endpoint}`, {
-            headers: {
-                'Authorization': `Bearer ${token}`
-            }
-        });
-
-        if (response.ok) {
-            return await response.json();
-        } else {
-            throw new Error(`Failed to fetch ${endpoint}`);
-        }
-    }
-
-    updateStatsCards(companies, users, rides, payments) {
-        const statsCards = document.getElementById('statsCards');
-        if (!statsCards) return;
-
-        statsCards.innerHTML = `
-            <div class="col-md-3">
-                <div class="card text-white bg-primary">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between">
-                            <div>
-                                <h4 class="card-title">${companies.length || 0}</h4>
-                                <p class="card-text">Total Companies</p>
-                            </div>
-                            <div class="align-self-center">
-                                <i class="fas fa-building fa-2x"></i>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card text-white bg-success">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between">
-                            <div>
-                                <h4 class="card-title">${users.length || 0}</h4>
-                                <p class="card-text">Active Users</p>
-                            </div>
-                            <div class="align-self-center">
-                                <i class="fas fa-users fa-2x"></i>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card text-white bg-warning">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between">
-                            <div>
-                                <h4 class="card-title">${rides.filter(r => r.status === 'in_progress').length || 0}</h4>
-                                <p class="card-text">Active Rides</p>
-                            </div>
-                            <div class="align-self-center">
-                                <i class="fas fa-car fa-2x"></i>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card text-white bg-info">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between">
-                            <div>
-                                <h4 class="card-title">${rides.length || 0}</h4>
-                                <p class="card-text">Total Rides</p>
-                            </div>
-                            <div class="align-self-center">
-                                <i class="fas fa-chart-line fa-2x"></i>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-
-    updateActivityTable(rides) {
-        const activityTable = document.getElementById('activity-table');
-        if (!activityTable) return;
-
-        const recentRides = rides.slice(0, 10);
-        
-        if (recentRides.length === 0) {
-            activityTable.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No recent activity</td></tr>';
-            return;
-        }
-
-        activityTable.innerHTML = recentRides.map(ride => `
-            <tr>
-                <td>${new Date(ride.created_at).toLocaleString()}</td>
-                <td>Ride ${ride.status} from ${ride.pickup_location} to ${ride.destination}</td>
-                <td>${ride.rider_id}</td>
-                <td>${ride.company_id}</td>
-                <td><span class="badge bg-${this.getStatusColor(ride.status)}">${ride.status}</span></td>
-            </tr>
-        `).join('');
-    }
-
-    getStatusColor(status) {
-        const colors = {
-            'pending': 'warning',
-            'matched': 'info',
-            'in_progress': 'primary',
-            'completed': 'success',
-            'cancelled': 'danger'
-        };
-        return colors[status] || 'secondary';
-    }
-
-    updateCharts(rides, users) {
-        this.createRideChart(rides);
-        this.createUserChart(users);
-    }
-
-    createRideChart(rides) {
-        const ctx = document.getElementById('rideChart');
-        if (!ctx) return;
-
-        const statusCounts = rides.reduce((acc, ride) => {
-            acc[ride.status] = (acc[ride.status] || 0) + 1;
-            return acc;
-        }, {});
-
-        new Chart(ctx, {
-            type: 'doughnut',
-            data: {
-                labels: Object.keys(statusCounts),
-                datasets: [{
-                    data: Object.values(statusCounts),
-                    backgroundColor: [
-                        '#FF6384',
-                        '#36A2EB',
-                        '#FFCE56',
-                        '#4BC0C0',
-                        '#9966FF'
-                    ]
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false
-            }
-        });
-    }
-
-    createUserChart(users) {
-        const ctx = document.getElementById('userChart');
-        if (!ctx) return;
-
-        const departmentCounts = users.reduce((acc, user) => {
-            acc[user.department] = (acc[user.department] || 0) + 1;
-            return acc;
-        }, {});
-
-        new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: Object.keys(departmentCounts),
-                datasets: [{
-                    label: 'Users per Department',
-                    data: Object.values(departmentCounts),
-                    backgroundColor: '#36A2EB'
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    y: {
-                        beginAtZero: true
-                    }
-                }
-            }
-        });
-    }
-
-    async loadCompaniesData() {
+    async loadCompanies() {
         try {
-            const companies = await this.fetchData('companies');
-            this.displayCompaniesTable(companies);
+            const response = await fetch('/api/v1/companies/', {
+                headers: {
+                    'Authorization': `Bearer ${this.authToken}`,
+                },
+            });
+
+            if (response.ok) {
+                const companies = await response.json();
+                this.updateCompaniesSection(companies);
+            }
         } catch (error) {
             console.error('Failed to load companies:', error);
-            this.showAlert('Failed to load companies data', 'danger');
         }
     }
 
-    async loadUsersData() {
+    async loadUsers() {
         try {
-            const users = await this.fetchData('users');
-            this.displayUsersTable(users);
+            const response = await fetch('/api/v1/users/', {
+                headers: {
+                    'Authorization': `Bearer ${this.authToken}`,
+                },
+            });
+
+            if (response.ok) {
+                const users = await response.json();
+                this.updateUsersSection(users);
+            }
         } catch (error) {
             console.error('Failed to load users:', error);
-            this.showAlert('Failed to load users data', 'danger');
         }
     }
 
-    async loadRidesData() {
+    async loadRides() {
         try {
-            const rides = await this.fetchData('rides');
-            this.displayRidesTable(rides);
+            const response = await fetch('/api/v1/rides/', {
+                headers: {
+                    'Authorization': `Bearer ${this.authToken}`,
+                },
+            });
+
+            if (response.ok) {
+                const rides = await response.json();
+                this.updateRidesSection(rides);
+            }
         } catch (error) {
             console.error('Failed to load rides:', error);
-            this.showAlert('Failed to load rides data', 'danger');
         }
     }
 
-    async loadAnalyticsData() {
+    async loadStats() {
         try {
-            const [rides, payments] = await Promise.all([
-                this.fetchData('rides'),
-                this.fetchData('payments/company/summary')
+            const [companiesResponse, usersResponse, ridesResponse] = await Promise.all([
+                fetch('/api/v1/companies/', {
+                    headers: { 'Authorization': `Bearer ${this.authToken}` },
+                }),
+                fetch('/api/v1/users/', {
+                    headers: { 'Authorization': `Bearer ${this.authToken}` },
+                }),
+                fetch('/api/v1/rides/', {
+                    headers: { 'Authorization': `Bearer ${this.authToken}` },
+                }),
             ]);
-            this.displayAnalytics(rides, payments);
+
+            const companies = await companiesResponse.json();
+            const users = await usersResponse.json();
+            const rides = await ridesResponse.json();
+
+            this.updateStats(companies.length, users.length, rides.length);
         } catch (error) {
-            console.error('Failed to load analytics:', error);
-            this.showAlert('Failed to load analytics data', 'danger');
+            console.error('Failed to load stats:', error);
         }
     }
 
-    displayCompaniesTable(companies) {
-        const mainContent = document.querySelector('main');
-        mainContent.innerHTML = `
-            <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-                <h1 class="h2">Companies Management</h1>
-                <button class="btn btn-primary" onclick="adminDashboard.showAddCompanyModal()">
+    updateStats(companiesCount, usersCount, ridesCount) {
+        const statsCards = document.querySelectorAll('.card-title');
+        if (statsCards.length >= 4) {
+            statsCards[0].textContent = companiesCount;
+            statsCards[1].textContent = usersCount;
+            statsCards[2].textContent = rides.filter(r => r.status === 'in_progress').length;
+            statsCards[3].textContent = ridesCount;
+        }
+    }
+
+    updateCompaniesSection(companies) {
+        const companiesContent = document.getElementById('companies-content');
+        if (!companiesContent) return;
+
+        companiesContent.innerHTML = `
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5>Companies (${companies.length})</h5>
+                <button class="btn btn-primary btn-sm" onclick="adminDashboard.showAddCompanyForm()">
                     <i class="fas fa-plus"></i> Add Company
                 </button>
             </div>
@@ -489,8 +225,8 @@ class AdminDashboard {
                     <thead>
                         <tr>
                             <th>Name</th>
-                            <th>Contact Email</th>
-                            <th>Contact Phone</th>
+                            <th>Address</th>
+                            <th>Contact</th>
                             <th>Status</th>
                             <th>Actions</th>
                         </tr>
@@ -499,12 +235,20 @@ class AdminDashboard {
                         ${companies.map(company => `
                             <tr>
                                 <td>${company.name}</td>
+                                <td>${company.address}</td>
                                 <td>${company.contact_email}</td>
-                                <td>${company.contact_phone}</td>
-                                <td><span class="badge bg-${company.is_active ? 'success' : 'danger'}">${company.is_active ? 'Active' : 'Inactive'}</span></td>
                                 <td>
-                                    <button class="btn btn-sm btn-outline-primary" onclick="adminDashboard.editCompany('${company.id}')">Edit</button>
-                                    <button class="btn btn-sm btn-outline-danger" onclick="adminDashboard.deleteCompany('${company.id}')">Delete</button>
+                                    <span class="badge ${company.is_active ? 'bg-success' : 'bg-danger'}">
+                                        ${company.is_active ? 'Active' : 'Inactive'}
+                                    </span>
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-primary" onclick="adminDashboard.editCompany('${company.id}')">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="adminDashboard.deleteCompany('${company.id}')">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
                                 </td>
                             </tr>
                         `).join('')}
@@ -514,12 +258,14 @@ class AdminDashboard {
         `;
     }
 
-    displayUsersTable(users) {
-        const mainContent = document.querySelector('main');
-        mainContent.innerHTML = `
-            <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-                <h1 class="h2">Users Management</h1>
-                <button class="btn btn-primary" onclick="adminDashboard.showAddUserModal()">
+    updateUsersSection(users) {
+        const usersContent = document.getElementById('users-content');
+        if (!usersContent) return;
+
+        usersContent.innerHTML = `
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5>Users (${users.length})</h5>
+                <button class="btn btn-primary btn-sm" onclick="adminDashboard.showAddUserForm()">
                     <i class="fas fa-plus"></i> Add User
                 </button>
             </div>
@@ -541,11 +287,23 @@ class AdminDashboard {
                                 <td>${user.name}</td>
                                 <td>${user.email}</td>
                                 <td>${user.department}</td>
-                                <td>${user.role}</td>
-                                <td><span class="badge bg-${user.is_active ? 'success' : 'danger'}">${user.is_active ? 'Active' : 'Inactive'}</span></td>
                                 <td>
-                                    <button class="btn btn-sm btn-outline-primary" onclick="adminDashboard.editUser('${user.id}')">Edit</button>
-                                    <button class="btn btn-sm btn-outline-danger" onclick="adminDashboard.deleteUser('${user.id}')">Delete</button>
+                                    <span class="badge ${user.role === 'admin' ? 'bg-danger' : 'bg-primary'}">
+                                        ${user.role}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="badge ${user.is_active ? 'bg-success' : 'bg-danger'}">
+                                        ${user.is_active ? 'Active' : 'Inactive'}
+                                    </span>
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-primary" onclick="adminDashboard.editUser('${user.id}')">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="adminDashboard.deleteUser('${user.id}')">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
                                 </td>
                             </tr>
                         `).join('')}
@@ -555,18 +313,20 @@ class AdminDashboard {
         `;
     }
 
-    displayRidesTable(rides) {
-        const mainContent = document.querySelector('main');
-        mainContent.innerHTML = `
-            <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-                <h1 class="h2">Rides Management</h1>
+    updateRidesSection(rides) {
+        const ridesContent = document.getElementById('rides-content');
+        if (!ridesContent) return;
+
+        ridesContent.innerHTML = `
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5>Rides (${rides.length})</h5>
             </div>
             <div class="table-responsive">
                 <table class="table table-striped">
                     <thead>
                         <tr>
-                            <th>Pickup</th>
-                            <th>Destination</th>
+                            <th>From</th>
+                            <th>To</th>
                             <th>Rider</th>
                             <th>Status</th>
                             <th>Created</th>
@@ -579,10 +339,16 @@ class AdminDashboard {
                                 <td>${ride.pickup_location}</td>
                                 <td>${ride.destination}</td>
                                 <td>${ride.rider_id}</td>
-                                <td><span class="badge bg-${this.getStatusColor(ride.status)}">${ride.status}</span></td>
+                                <td>
+                                    <span class="badge ${this.getStatusBadgeClass(ride.status)}">
+                                        ${ride.status}
+                                    </span>
+                                </td>
                                 <td>${new Date(ride.created_at).toLocaleDateString()}</td>
                                 <td>
-                                    <button class="btn btn-sm btn-outline-info" onclick="adminDashboard.viewRideDetails('${ride.id}')">View</button>
+                                    <button class="btn btn-sm btn-outline-primary" onclick="adminDashboard.viewRide('${ride.id}')">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
                                 </td>
                             </tr>
                         `).join('')}
@@ -592,126 +358,123 @@ class AdminDashboard {
         `;
     }
 
-    displayAnalytics(rides, payments) {
-        const mainContent = document.querySelector('main');
-        mainContent.innerHTML = `
-            <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-                <h1 class="h2">Analytics Dashboard</h1>
-            </div>
-            
-            <div class="row">
-                <div class="col-md-6">
-                    <div class="card">
-                        <div class="card-header">
-                            <h5>Ride Statistics</h5>
-                        </div>
-                        <div class="card-body">
-                            <canvas id="analyticsRideChart" width="400" height="200"></canvas>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-6">
-                    <div class="card">
-                        <div class="card-header">
-                            <h5>Payment Summary</h5>
-                        </div>
-                        <div class="card-body">
-                            <div class="row text-center">
-                                <div class="col-6">
-                                    <h3 class="text-primary">$${payments.total_amount || 0}</h3>
-                                    <p>Total Revenue</p>
-                                </div>
-                                <div class="col-6">
-                                    <h3 class="text-success">${payments.total_payments || 0}</h3>
-                                    <p>Total Payments</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-
-        // Create analytics chart
-        this.createAnalyticsChart(rides);
+    getStatusBadgeClass(status) {
+        const statusClasses = {
+            'pending': 'bg-warning',
+            'matched': 'bg-info',
+            'in_progress': 'bg-primary',
+            'completed': 'bg-success',
+            'cancelled': 'bg-danger',
+        };
+        return statusClasses[status] || 'bg-secondary';
     }
 
-    createAnalyticsChart(rides) {
-        const ctx = document.getElementById('analyticsRideChart');
-        if (!ctx) return;
+    showSection(sectionName) {
+        // Hide all sections
+        document.querySelectorAll('.section-content').forEach(section => {
+            section.style.display = 'none';
+        });
 
-        const monthlyData = this.groupRidesByMonth(rides);
+        // Show target section
+        const targetSection = document.getElementById(`${sectionName}-content`);
+        if (targetSection) {
+            targetSection.style.display = 'block';
+        }
+
+        // Update navigation
+        document.querySelectorAll('.nav-link').forEach(link => {
+            link.classList.remove('active');
+        });
+        document.querySelector(`[href="#${sectionName}"]`).classList.add('active');
+    }
+
+    showLoginForm() {
+        document.getElementById('login-section').style.display = 'block';
+        document.getElementById('dashboard-section').style.display = 'none';
+    }
+
+    showAuthenticatedUI() {
+        document.getElementById('login-section').style.display = 'none';
+        document.getElementById('dashboard-section').style.display = 'block';
         
-        new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: Object.keys(monthlyData),
-                datasets: [{
-                    label: 'Rides per Month',
-                    data: Object.values(monthlyData),
-                    borderColor: '#36A2EB',
-                    backgroundColor: 'rgba(54, 162, 235, 0.1)',
-                    tension: 0.1
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    y: {
-                        beginAtZero: true
-                    }
-                }
+        // Update user info
+        if (this.currentUser) {
+            const userInfo = document.getElementById('user-info');
+            if (userInfo) {
+                userInfo.innerHTML = `
+                    <span class="text-white">
+                        <i class="fas fa-user"></i> ${this.currentUser.name}
+                    </span>
+                `;
             }
-        });
+        }
     }
 
-    groupRidesByMonth(rides) {
-        const monthlyData = {};
-        rides.forEach(ride => {
-            const date = new Date(ride.created_at);
-            const monthYear = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-            monthlyData[monthYear] = (monthlyData[monthYear] || 0) + 1;
-        });
-        return monthlyData;
-    }
-
-    showAlert(message, type = 'info') {
-        const alertDiv = document.createElement('div');
-        alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
-        alertDiv.innerHTML = `
+    showError(message) {
+        // Create and show error toast
+        const toast = document.createElement('div');
+        toast.className = 'alert alert-danger alert-dismissible fade show position-fixed';
+        toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999;';
+        toast.innerHTML = `
             ${message}
             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         `;
-        
-        const container = document.querySelector('.container-fluid');
-        container.insertBefore(alertDiv, container.firstChild);
-        
-        // Auto-dismiss after 5 seconds
+        document.body.appendChild(toast);
+
+        // Auto-remove after 5 seconds
         setTimeout(() => {
-            if (alertDiv.parentNode) {
-                alertDiv.remove();
+            if (toast.parentNode) {
+                toast.parentNode.removeChild(toast);
             }
         }, 5000);
     }
 
-    refreshData() {
-        this.loadDashboardData();
-        this.showAlert('Data refreshed successfully', 'success');
-    }
+    showSuccess(message) {
+        // Create and show success toast
+        const toast = document.createElement('div');
+        toast.className = 'alert alert-success alert-dismissible fade show position-fixed';
+        toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999;';
+        toast.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        document.body.appendChild(toast);
 
-    exportData() {
-        // TODO: Implement data export functionality
-        this.showAlert('Export functionality coming soon!', 'info');
-    }
-
-    startAutoRefresh() {
-        // Refresh data every 30 seconds
-        setInterval(() => {
-            if (document.querySelector('#statsCards')) {
-                this.loadDashboardData();
+        // Auto-remove after 5 seconds
+        setTimeout(() => {
+            if (toast.parentNode) {
+                toast.parentNode.removeChild(toast);
             }
-        }, 30000);
+        }, 5000);
+    }
+
+    // Placeholder methods for future implementation
+    showAddCompanyForm() {
+        this.showError('Add company functionality coming soon!');
+    }
+
+    editCompany(companyId) {
+        this.showError('Edit company functionality coming soon!');
+    }
+
+    deleteCompany(companyId) {
+        this.showError('Delete company functionality coming soon!');
+    }
+
+    showAddUserForm() {
+        this.showError('Add user functionality coming soon!');
+    }
+
+    editUser(userId) {
+        this.showError('Edit user functionality coming soon!');
+    }
+
+    deleteUser(userId) {
+        this.showError('Delete user functionality coming soon!');
+    }
+
+    viewRide(rideId) {
+        this.showError('View ride functionality coming soon!');
     }
 }
 

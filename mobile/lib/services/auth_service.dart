@@ -98,4 +98,26 @@ class AuthService {
       throw Exception('Failed to refresh user data: ${e.toString()}');
     }
   }
+
+  static Future<User?> getCurrentUser() async {
+    if (_currentUser != null) {
+      return _currentUser;
+    }
+    
+    // Try to load from storage
+    final prefs = await SharedPreferences.getInstance();
+    final userJson = prefs.getString(AppConstants.userKey);
+    if (userJson != null) {
+      try {
+        final userData = json.decode(userJson);
+        _currentUser = User.fromJson(userData);
+        return _currentUser;
+      } catch (e) {
+        // Invalid user data, clear it
+        await logout();
+      }
+    }
+    
+    return null;
+  }
 }

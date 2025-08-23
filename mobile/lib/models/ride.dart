@@ -20,6 +20,16 @@ class Ride {
   final int currentPassengers;
   final String? notes;
   final DateTime createdAt;
+  
+  // Driver information
+  final String? driverName;
+  final String? driverEmail;
+  final String? driverPhone;
+  final double? driverRating;
+  final bool? driverIsAvailable;
+  
+  // Driver offers
+  final List<DriverOffer>? driverOffers;
 
   Ride({
     required this.id,
@@ -43,6 +53,12 @@ class Ride {
     this.currentPassengers = 1,
     this.notes,
     required this.createdAt,
+    this.driverName,
+    this.driverEmail,
+    this.driverPhone,
+    this.driverRating,
+    this.driverIsAvailable,
+    this.driverOffers,
   });
 
   factory Ride.fromJson(Map<String, dynamic> json) {
@@ -74,6 +90,16 @@ class Ride {
       currentPassengers: json['current_passengers'] ?? 1,
       notes: json['notes'],
       createdAt: DateTime.parse(json['created_at']),
+      driverName: json['driver_name'],
+      driverEmail: json['driver_email'],
+      driverPhone: json['driver_phone'],
+      driverRating: json['driver_rating']?.toDouble(),
+      driverIsAvailable: json['driver_is_available'],
+      driverOffers: json['driver_offers'] != null 
+          ? (json['driver_offers'] as List)
+              .map((offer) => DriverOffer.fromJson(offer))
+              .toList()
+          : null,
     );
   }
 
@@ -99,6 +125,8 @@ class RideRequest {
   final String status;
   final String? message;
   final DateTime createdAt;
+  final String? userName;
+  final String? userEmail;
 
   RideRequest({
     required this.id,
@@ -107,6 +135,8 @@ class RideRequest {
     required this.status,
     this.message,
     required this.createdAt,
+    this.userName,
+    this.userEmail,
   });
 
   factory RideRequest.fromJson(Map<String, dynamic> json) {
@@ -117,6 +147,73 @@ class RideRequest {
       status: json['status'],
       message: json['message'],
       createdAt: DateTime.parse(json['created_at']),
+      userName: json['user_name'],
+      userEmail: json['user_email'],
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'ride_id': rideId,
+      'user_id': userId,
+      'status': status,
+      'message': message,
+      'created_at': createdAt.toIso8601String(),
+      'user_name': userName,
+      'user_email': userEmail,
+    };
+  }
+}
+
+class DriverOffer {
+  final String id;
+  final String driverId;
+  final String driverName;
+  final String? driverEmail;
+  final String? driverPhone;
+  final double? driverRating;
+  final String status; // pending, accepted, declined
+  final String? message;
+  final DateTime createdAt;
+
+  DriverOffer({
+    required this.id,
+    required this.driverId,
+    required this.driverName,
+    this.driverEmail,
+    this.driverPhone,
+    this.driverRating,
+    required this.status,
+    this.message,
+    required this.createdAt,
+  });
+
+  factory DriverOffer.fromJson(Map<String, dynamic> json) {
+    return DriverOffer(
+      id: json['id'],
+      driverId: json['driver_id'],
+      driverName: json['driver_name'],
+      driverEmail: json['driver_email'],
+      driverPhone: json['driver_phone'],
+      driverRating: json['driver_rating']?.toDouble(),
+      status: json['status'],
+      message: json['message'],
+      createdAt: DateTime.parse(json['created_at']),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'driver_id': driverId,
+      'driver_name': driverName,
+      'driver_email': driverEmail,
+      'driver_phone': driverPhone,
+      'driver_rating': driverRating,
+      'status': status,
+      'message': message,
+      'created_at': createdAt.toIso8601String(),
+    };
   }
 }

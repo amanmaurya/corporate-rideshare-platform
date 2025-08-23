@@ -7,6 +7,7 @@ from app.models.user import User
 from app.models.company import Company
 from app.schemas.user import UserCreate, UserUpdate, UserResponse
 from app.services.auth import verify_token, get_password_hash
+from datetime import datetime
 
 router = APIRouter()
 security = HTTPBearer()
@@ -75,6 +76,42 @@ async def get_user(user_id: str, current_user: User = Depends(get_current_user),
         )
     
     return user
+
+@router.post("/register-driver")
+async def register_as_driver(user_update: UserUpdate, 
+                           current_user: User = Depends(get_current_user), 
+                           db: Session = Depends(get_database)):
+    """Allow users to register themselves as drivers"""
+    # Users can only update their own profile
+    if user_update.id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Can only update your own profile"
+        )
+
+    # Only allow updating driver status and related fields
+    allowed_fields = {'is_driver', 'driver_license', 'vehicle_info', 'is_available'}
+    update_data = {k: v for k, v in user_update.dict(exclude_unset=True).items() 
+                   if k in allowed_fields}
+
+    if not update_data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No valid fields to update"
+        )
+
+    # Update user fields
+    for field, value in update_data.items():
+        setattr(current_user, field, value)
+
+    # Set driver status
+    current_user.is_driver = True
+    current_user.updated_at = datetime.utcnow()
+    
+    db.commit()
+    db.refresh(current_user)
+
+    return {"message": "Successfully registered as driver", "user": current_user}
 
 @router.post("/", response_model=UserResponse)
 async def create_user(user: UserCreate, current_user: User = Depends(get_current_user), 
