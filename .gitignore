@@ -304,3 +304,9 @@ coverage/
 *.p8
 secrets/
 secrets.json
+
+# ====================================
+# Web Admin Specific
+# ====================================
+web-admin/static/uploads/
+web-admin/logs/
