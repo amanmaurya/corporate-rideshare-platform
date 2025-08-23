@@ -74,7 +74,10 @@ __pypackages__/
 .pub-cache/
 .pub/
 build/
-*.lock
+# Lock files (but preserve pubspec.lock for Flutter)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
 
 # Generated files
 *.log
