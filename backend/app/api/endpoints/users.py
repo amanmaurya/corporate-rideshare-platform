@@ -1,13 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Body
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from app.database import get_database
 from app.models.user import User
 from app.models.company import Company
 from app.schemas.user import UserCreate, UserUpdate, UserResponse
 from app.services.auth import verify_token, get_password_hash
-from datetime import datetime
+from datetime import datetime, timezone
 
 router = APIRouter()
 security = HTTPBearer()
@@ -106,7 +106,7 @@ async def register_as_driver(user_update: UserUpdate,
 
     # Set driver status
     current_user.is_driver = True
-    current_user.updated_at = datetime.utcnow()
+    current_user.updated_at = datetime.now(timezone.utc)
     
     db.commit()
     db.refresh(current_user)

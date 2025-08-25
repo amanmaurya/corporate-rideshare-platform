@@ -153,6 +153,26 @@ class _RideCard extends StatelessWidget {
     }
   }
 
+  Widget _buildRideDetailRow(IconData icon, String label, String value) {
+    return Row(
+      children: [
+        Icon(
+          icon,
+          size: 16,
+          color: AppColors.textSecondaryColor,
+        ),
+        const SizedBox(width: 4),
+        Text(
+          '$label: $value',
+          style: const TextStyle(
+            color: AppColors.textSecondaryColor,
+            fontSize: 12,
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Card(
@@ -185,10 +205,10 @@ class _RideCard extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '${ride.createdAt.day}/${ride.createdAt.month}/${ride.createdAt.year}',
-                  style: const TextStyle(
+                  '${ride.confirmedPassengers}/${ride.vehicleCapacity} passengers',
+                  style: TextStyle(
                     color: AppColors.textSecondaryColor,
-                    fontSize: 12,
+                    fontSize: 14,
                   ),
                 ),
               ],
@@ -232,39 +252,19 @@ class _RideCard extends StatelessWidget {
             const SizedBox(height: 12),
 
             // Ride Details
-            Row(
-              children: [
-                Icon(
-                  Icons.people,
-                  size: 16,
-                  color: AppColors.textSecondaryColor,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  '${ride.currentPassengers}/${ride.maxPassengers}',
-                  style: const TextStyle(
-                    color: AppColors.textSecondaryColor,
-                    fontSize: 12,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                if (ride.scheduledTime != null) ...[
-                  Icon(
-                    Icons.schedule,
-                    size: 16,
-                    color: AppColors.textSecondaryColor,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    '${ride.scheduledTime!.hour}:${ride.scheduledTime!.minute.toString().padLeft(2, '0')}',
-                    style: const TextStyle(
-                      color: AppColors.textSecondaryColor,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ],
+            _buildRideDetailRow(
+              Icons.people,
+              'Passengers',
+              '${ride.confirmedPassengers}/${ride.vehicleCapacity}',
             ),
+            if (ride.scheduledTime != null) ...[
+              const SizedBox(height: 8),
+              _buildRideDetailRow(
+                Icons.schedule,
+                'Scheduled Time',
+                '${ride.scheduledTime!.hour}:${ride.scheduledTime!.minute.toString().padLeft(2, '0')}',
+              ),
+            ],
 
             // Notes
             if (ride.notes != null && ride.notes!.isNotEmpty) ...[

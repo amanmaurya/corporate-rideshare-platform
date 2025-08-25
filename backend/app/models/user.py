@@ -27,6 +27,6 @@ class User(Base):
 
     # Relationships
     company = relationship("Company", back_populates="users")
-    rides_as_rider = relationship("Ride", foreign_keys="Ride.rider_id", back_populates="rider")
     rides_as_driver = relationship("Ride", foreign_keys="Ride.driver_id", back_populates="driver")
-    ride_requests = relationship("RideRequest", back_populates="user")
+    ride_requests = relationship("RideRequest", foreign_keys="RideRequest.user_id", back_populates="user")
+    ride_locations = relationship("RideLocation", back_populates="user")

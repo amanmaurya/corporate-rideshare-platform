@@ -18,11 +18,12 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
   final _pickupController = TextEditingController();
   final _destinationController = TextEditingController();
   final _notesController = TextEditingController();
+  final _fareController = TextEditingController();
 
   double? _pickupLat, _pickupLng;
   double? _destLat, _destLng;
   DateTime? _scheduledTime;
-  int _maxPassengers = 4;
+  int _vehicleCapacity = 4;
   bool _isLoading = false;
 
   @override
@@ -36,6 +37,7 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
     _pickupController.dispose();
     _destinationController.dispose();
     _notesController.dispose();
+    _fareController.dispose();
     super.dispose();
   }
 
@@ -112,7 +114,8 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
         destinationLongitude: _destLng!,
         scheduledTime: _scheduledTime,
         notes: _notesController.text.isNotEmpty ? _notesController.text : null,
-        maxPassengers: _maxPassengers,
+        vehicleCapacity: _vehicleCapacity,
+        fare: _fareController.text.isNotEmpty ? double.tryParse(_fareController.text) : null,
       );
 
       if (mounted) {
@@ -235,22 +238,46 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Max Passengers: $_maxPassengers',
+                        'Vehicle Capacity: $_vehicleCapacity',
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                       Slider(
-                        value: _maxPassengers.toDouble(),
+                        value: _vehicleCapacity.toDouble(),
                         min: 1,
                         max: 6,
                         divisions: 5,
-                        label: _maxPassengers.toString(),
+                        label: _vehicleCapacity.toString(),
                         onChanged: (value) {
-                          setState(() => _maxPassengers = value.round());
+                          setState(() => _vehicleCapacity = value.round());
                         },
                       ),
                     ],
                   ),
                 ),
+              ),
+              const SizedBox(height: 16),
+
+              // Fare (Optional)
+              TextFormField(
+                controller: _fareController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: 'Fare (Optional)',
+                  hintText: 'Enter fare amount...',
+                  prefixIcon: const Icon(Icons.attach_money),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                validator: (value) {
+                  if (value != null && value.isNotEmpty) {
+                    final fare = double.tryParse(value);
+                    if (fare == null || fare <= 0) {
+                      return 'Please enter a valid fare amount';
+                    }
+                  }
+                  return null;
+                },
               ),
               const SizedBox(height: 16),
 

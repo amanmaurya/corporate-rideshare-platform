@@ -1,9 +1,13 @@
 import asyncio
 import json
 import logging
-from typing import Dict, Set, Optional
+from typing import Dict, Set, Optional, List, Any
 from fastapi import WebSocket, WebSocketDisconnect
-from datetime import datetime
+from datetime import datetime, timezone
+from sqlalchemy.orm import Session
+from app.database import get_database
+from app.models.user import User
+from app.models.ride import Ride, RideRequest
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +48,7 @@ class ConnectionManager:
         message = {
             "type": "ride_request",
             "data": ride_request,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
         
         # Send to all drivers in the company
@@ -103,7 +107,7 @@ class ConnectionManager:
             await self.send_personal_message({
                 "type": "ride_request",
                 "data": ride_data,
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.now(timezone.utc).isoformat()
             }, driver_id)
             
     async def find_nearby_drivers(self, company_id: str, lat: float, lon: float, max_distance: float = 5.0):
@@ -139,7 +143,7 @@ class ConnectionManager:
             "type": "ride_notification",
             "notification_type": notification_type,
             "data": data,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
         await self.send_personal_message(message, user_id)
 

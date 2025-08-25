@@ -1,8 +1,7 @@
 class Ride {
   final String id;
   final String companyId;
-  final String riderId;
-  final String? driverId;
+  final String driverId;  // Driver creates the ride
   final String pickupLocation;
   final String destination;
   final double pickupLatitude;
@@ -12,12 +11,18 @@ class Ride {
   final DateTime? scheduledTime;
   final DateTime? actualStartTime;
   final DateTime? actualEndTime;
+  
+  // Strict status flow: available → confirmed → in_progress → completed
   final String status;
+  
   final double? fare;
   final double? distance;
   final int? duration;
-  final int maxPassengers;
-  final int currentPassengers;
+  
+  // Vehicle capacity management
+  final int vehicleCapacity;  // Total seats in vehicle
+  final int confirmedPassengers;  // Number of confirmed passengers
+  
   final String? notes;
   final DateTime createdAt;
   
@@ -26,20 +31,27 @@ class Ride {
   final String? driverEmail;
   final String? driverPhone;
   final double? driverRating;
-  final bool? driverIsAvailable;
   
-  // Driver offers
-  final List<DriverOffer>? driverOffers;
+  // Ride progress tracking
+  final double? currentLatitude;
+  final double? currentLongitude;
+  final DateTime? pickupTime;
+  final DateTime? dropoffTime;
+  final DateTime? estimatedPickupTime;
+  final DateTime? estimatedDropoffTime;
+  final double? rideProgress;
   
-  // Rider information
-  final String? riderName;
-  final String? riderEmail;
+  // Payment and rating (only after completion)
+  final String? paymentStatus;
+  final String? paymentMethod;
+  final double? rideRating;
+  final String? rideFeedback;
+  final String? routePolyline;
 
   Ride({
     required this.id,
     required this.companyId,
-    required this.riderId,
-    this.driverId,
+    required this.driverId,
     required this.pickupLocation,
     required this.destination,
     required this.pickupLatitude,
@@ -53,25 +65,32 @@ class Ride {
     this.fare,
     this.distance,
     this.duration,
-    this.maxPassengers = 4,
-    this.currentPassengers = 1,
+    required this.vehicleCapacity,
+    required this.confirmedPassengers,
     this.notes,
     required this.createdAt,
     this.driverName,
     this.driverEmail,
     this.driverPhone,
     this.driverRating,
-    this.driverIsAvailable,
-    this.driverOffers,
-    this.riderName,
-    this.riderEmail,
+    this.currentLatitude,
+    this.currentLongitude,
+    this.pickupTime,
+    this.dropoffTime,
+    this.estimatedPickupTime,
+    this.estimatedDropoffTime,
+    this.rideProgress,
+    this.paymentStatus,
+    this.paymentMethod,
+    this.rideRating,
+    this.rideFeedback,
+    this.routePolyline,
   });
 
   factory Ride.fromJson(Map<String, dynamic> json) {
     return Ride(
       id: json['id'],
       companyId: json['company_id'],
-      riderId: json['rider_id'],
       driverId: json['driver_id'],
       pickupLocation: json['pickup_location'],
       destination: json['destination'],
@@ -92,22 +111,34 @@ class Ride {
       fare: json['fare']?.toDouble(),
       distance: json['distance']?.toDouble(),
       duration: json['duration'],
-      maxPassengers: json['max_passengers'] ?? 4,
-      currentPassengers: json['current_passengers'] ?? 1,
+      vehicleCapacity: json['vehicle_capacity'] ?? 4,
+      confirmedPassengers: json['confirmed_passengers'] ?? 0,
       notes: json['notes'],
       createdAt: DateTime.parse(json['created_at']),
       driverName: json['driver_name'],
       driverEmail: json['driver_email'],
       driverPhone: json['driver_phone'],
       driverRating: json['driver_rating']?.toDouble(),
-      driverIsAvailable: json['driver_is_available'],
-      driverOffers: json['driver_offers'] != null 
-          ? (json['driver_offers'] as List)
-              .map((offer) => DriverOffer.fromJson(offer))
-              .toList()
+      currentLatitude: json['current_latitude']?.toDouble(),
+      currentLongitude: json['current_longitude']?.toDouble(),
+      pickupTime: json['pickup_time'] != null 
+          ? DateTime.parse(json['pickup_time']) 
           : null,
-      riderName: json['rider_name'],
-      riderEmail: json['rider_email'],
+      dropoffTime: json['dropoff_time'] != null 
+          ? DateTime.parse(json['dropoff_time']) 
+          : null,
+      estimatedPickupTime: json['estimated_pickup_time'] != null 
+          ? DateTime.parse(json['estimated_pickup_time']) 
+          : null,
+      estimatedDropoffTime: json['estimated_dropoff_time'] != null 
+          ? DateTime.parse(json['estimated_dropoff_time']) 
+          : null,
+      rideProgress: json['ride_progress']?.toDouble(),
+      paymentStatus: json['payment_status'],
+      paymentMethod: json['payment_method'],
+      rideRating: json['ride_rating']?.toDouble(),
+      rideFeedback: json['ride_feedback'],
+      routePolyline: json['route_polyline'],
     );
   }
 
@@ -115,7 +146,6 @@ class Ride {
     return {
       'id': id,
       'company_id': companyId,
-      'rider_id': riderId,
       'driver_id': driverId,
       'pickup_location': pickupLocation,
       'destination': destination,
@@ -124,13 +154,13 @@ class Ride {
       'destination_latitude': destinationLatitude,
       'destination_longitude': destinationLongitude,
       'scheduled_time': scheduledTime?.toIso8601String(),
+      'vehicle_capacity': vehicleCapacity,
       'notes': notes,
-      'max_passengers': maxPassengers,
       'status': status,
       'fare': fare,
       'distance': distance,
       'duration': duration,
-      'current_passengers': currentPassengers,
+      'confirmed_passengers': confirmedPassengers,
       'actual_start_time': actualStartTime?.toIso8601String(),
       'actual_end_time': actualEndTime?.toIso8601String(),
       'created_at': createdAt.toIso8601String(),
@@ -138,23 +168,47 @@ class Ride {
       'driver_email': driverEmail,
       'driver_phone': driverPhone,
       'driver_rating': driverRating,
-      'driver_is_available': driverIsAvailable,
-      'driver_offers': driverOffers?.map((offer) => offer.toJson()).toList(),
-      'rider_name': riderName,
-      'rider_email': riderEmail,
+      'current_latitude': currentLatitude,
+      'current_longitude': currentLongitude,
+      'pickup_time': pickupTime?.toIso8601String(),
+      'dropoff_time': dropoffTime?.toIso8601String(),
+      'estimated_pickup_time': estimatedPickupTime?.toIso8601String(),
+      'estimated_dropoff_time': estimatedDropoffTime?.toIso8601String(),
+      'ride_progress': rideProgress,
+      'payment_status': paymentStatus,
+      'payment_method': paymentMethod,
+      'ride_rating': rideRating,
+      'ride_feedback': rideFeedback,
+      'route_polyline': routePolyline,
     };
   }
+
+  // Helper methods for status checks
+  bool get isAvailable => status == 'available';
+  bool get isConfirmed => status == 'confirmed';
+  bool get isInProgress => status == 'in_progress';
+  bool get isCompleted => status == 'completed';
+  bool get isCancelled => status == 'cancelled';
+  
+  // Capacity helpers
+  bool get hasAvailableSeats => confirmedPassengers < vehicleCapacity;
+  int get availableSeats => vehicleCapacity - confirmedPassengers;
+  
+  // Status flow helpers
+  bool get canStart => isConfirmed && confirmedPassengers > 0;
+  bool get canComplete => isInProgress;
+  bool get canCancel => !isCompleted && !isCancelled;
 }
 
 class RideRequest {
   final String id;
   final String rideId;
-  final String userId;
-  final String status;
+  final String userId;  // User requesting seat (could be driver or rider)
+  final String status;  // pending, accepted, rejected, cancelled
   final String? message;
   final DateTime createdAt;
-  final String? userName;
-  final String? userEmail;
+  final String? userName;  // Name of the user
+  final String? userEmail;  // Email of the user
 
   RideRequest({
     required this.id,
@@ -185,63 +239,16 @@ class RideRequest {
       'id': id,
       'ride_id': rideId,
       'user_id': userId,
-      'status': status,
       'message': message,
       'created_at': createdAt.toIso8601String(),
       'user_name': userName,
       'user_email': userEmail,
     };
   }
-}
 
-class DriverOffer {
-  final String id;
-  final String driverId;
-  final String driverName;
-  final String? driverEmail;
-  final String? driverPhone;
-  final double? driverRating;
-  final String status; // pending, accepted, declined
-  final String? message;
-  final DateTime createdAt;
-
-  DriverOffer({
-    required this.id,
-    required this.driverId,
-    required this.driverName,
-    this.driverEmail,
-    this.driverPhone,
-    this.driverRating,
-    required this.status,
-    this.message,
-    required this.createdAt,
-  });
-
-  factory DriverOffer.fromJson(Map<String, dynamic> json) {
-    return DriverOffer(
-      id: json['id'],
-      driverId: json['driver_id'],
-      driverName: json['driver_name'],
-      driverEmail: json['driver_email'],
-      driverPhone: json['driver_phone'],
-      driverRating: json['driver_rating']?.toDouble(),
-      status: json['status'],
-      message: json['message'],
-      createdAt: DateTime.parse(json['created_at']),
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'driver_id': driverId,
-      'driver_name': driverName,
-      'driver_email': driverEmail,
-      'driver_phone': driverPhone,
-      'driver_rating': driverRating,
-      'status': status,
-      'message': message,
-      'created_at': createdAt.toIso8601String(),
-    };
-  }
+  // Helper methods for status checks
+  bool get isPending => status == 'pending';
+  bool get isAccepted => status == 'accepted';
+  bool get isRejected => status == 'rejected';
+  bool get isCancelled => status == 'cancelled';
 }

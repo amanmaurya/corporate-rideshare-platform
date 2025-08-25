@@ -65,10 +65,32 @@ app = FastAPI(
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify exact origins
+    allow_origins=[
+        "http://localhost:3000",      # React/Next.js apps
+        "http://localhost:8080",      # Flutter web default
+        "http://localhost:59167",     # Flutter web (current)
+        "http://localhost:8000",      # Backend itself
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:8080", 
+        "http://127.0.0.1:59167",
+        "http://127.0.0.1:8000",
+        "*"                           # Allow all for development
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_headers=[
+        "Accept",
+        "Accept-Language", 
+        "Content-Language",
+        "Content-Type",
+        "Authorization",
+        "X-Requested-With",
+        "Origin",
+        "Access-Control-Request-Method",
+        "Access-Control-Request-Headers"
+    ],
+    expose_headers=["*"],
+    max_age=86400,  # Cache preflight for 24 hours
 )
 
 # Mount static files for web admin
@@ -87,6 +109,12 @@ app.include_router(api_router, prefix="/api/v1")
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "message": "Corporate RideShare API is running"}
+
+# CORS preflight handler
+@app.options("/{full_path:path}")
+async def options_handler():
+    """Handle CORS preflight requests"""
+    return {"message": "CORS preflight handled"}
 
 # Root endpoint
 @app.get("/")

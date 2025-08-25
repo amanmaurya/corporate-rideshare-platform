@@ -1,6 +1,6 @@
 import logging
-from typing import Dict, List, Optional
-from datetime import datetime
+from typing import Dict, List, Optional, Any
+from datetime import datetime, timezone
 from enum import Enum
 import json
 
@@ -45,14 +45,14 @@ class NotificationService:
         """
         try:
             notification = {
-                "id": f"notif_{datetime.utcnow().timestamp()}",
+                "id": f"notif_{datetime.now(timezone.utc).timestamp()}",
                 "user_id": user_id,
                 "type": notification_type.value,
                 "title": title,
                 "message": message,
                 "data": data or {},
                 "priority": priority.value,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "read": False
             }
             
@@ -255,6 +255,16 @@ class NotificationService:
             "total_notifications": 0,
             "unread_notifications": 0,
             "read_notifications": 0
+        }
+
+    def _create_notification_data(self, notification_type: str, user_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "id": f"notif_{datetime.now(timezone.utc).timestamp()}",
+            "type": notification_type,
+            "user_id": user_id,
+            "data": data,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "read": False
         }
 
 # Global notification service instance

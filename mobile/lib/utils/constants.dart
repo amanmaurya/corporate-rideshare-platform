@@ -29,7 +29,7 @@ class AppConstants {
   static const double defaultZoom = 14.0;
 
   // App Configuration
-  static const int maxPassengers = 6;
+  static const int maxVehicleCapacity = 6;
   static const double maxSearchRadius = 10.0; // km
   static const int requestTimeoutSeconds = 30;
   

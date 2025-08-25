@@ -4,23 +4,22 @@ import '../../models/user.dart';
 import '../../services/ride_service.dart';
 import '../../services/auth_service.dart';
 import '../../utils/constants.dart';
-import '../ride/create_ride_screen.dart';
-import '../ride/ride_requests_screen.dart';
+import '../ride/available_rides_screen.dart';
 import '../ride/active_ride_screen.dart';
 
-class DriverDashboardScreen extends StatefulWidget {
-  const DriverDashboardScreen({Key? key}) : super(key: key);
+class EmployeeDashboardScreen extends StatefulWidget {
+  const EmployeeDashboardScreen({Key? key}) : super(key: key);
 
   @override
-  State<DriverDashboardScreen> createState() => _DriverDashboardScreenState();
+  State<EmployeeDashboardScreen> createState() => _EmployeeDashboardScreenState();
 }
 
-class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
-  Map<String, dynamic> _dashboardData = {};
+class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
   List<Ride> _upcomingRides = [];
+  Map<String, dynamic>? _dashboardData;
   List<Ride> _scheduledRides = [];
   List<Ride> _completedRides = [];
-  List<RideRequest> _pendingRequests = [];
+  List<Ride> _cancelledRides = [];
   bool _isLoading = true;
   String? _error;
   User? _currentUser;
@@ -38,7 +37,7 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
         _error = null;
       });
 
-      final dashboardData = await RideService.getDriverDashboard();
+      final dashboardData = await RideService.getEmployeeDashboard();
       
       if (dashboardData != null) {
         setState(() {
@@ -46,14 +45,14 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
           _upcomingRides = (dashboardData['rides']['upcoming'] as List<dynamic>? ?? [])
               .map((json) => Ride.fromJson(Map<String, dynamic>.from(json)))
               .toList();
-          _scheduledRides = (dashboardData['rides']['scheduled'] as List<dynamic>? ?? [])
+          _scheduledRides = (dashboardData['rides']['scheduled_rides'] as List<dynamic>? ?? [])
               .map((json) => Ride.fromJson(Map<String, dynamic>.from(json)))
               .toList();
           _completedRides = (dashboardData['rides']['completed'] as List<dynamic>? ?? [])
               .map((json) => Ride.fromJson(Map<String, dynamic>.from(json)))
               .toList();
-          _pendingRequests = (dashboardData['pending_requests'] as List<dynamic>? ?? [])
-              .map((json) => RideRequest.fromJson(Map<String, dynamic>.from(json)))
+          _cancelledRides = (dashboardData['rides']['cancelled'] as List<dynamic>? ?? [])
+              .map((json) => Ride.fromJson(Map<String, dynamic>.from(json)))
               .toList();
           _isLoading = false;
         });
@@ -75,7 +74,7 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Driver Dashboard'),
+        title: const Text('Employee Dashboard'),
         backgroundColor: AppColors.primaryColor,
         foregroundColor: Colors.white,
         elevation: 0,
@@ -116,11 +115,11 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
             const SizedBox(height: 24),
             _buildUpcomingRidesSection(),
             const SizedBox(height: 24),
-            _buildScheduledRidesSection(),
-            const SizedBox(height: 24),
-            _buildPendingRequestsSection(),
+            _buildScheduledRequestsSection(),
             const SizedBox(height: 24),
             _buildCompletedRidesSection(),
+            const SizedBox(height: 24),
+            _buildCancelledRidesSection(),
           ],
         ),
       ),
@@ -158,7 +157,7 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
                 radius: 30,
                 backgroundColor: Colors.white.withOpacity(0.2),
                 child: Icon(
-                  Icons.directions_car,
+                  Icons.person,
                   size: 35,
                   color: Colors.white,
                 ),
@@ -169,7 +168,7 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Welcome back, ${_currentUser?.name ?? 'Driver'}!',
+                      'Welcome back, ${_currentUser?.name ?? 'Employee'}!',
                       style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
@@ -177,7 +176,7 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Ready to create rides and help your colleagues?',
+                      'Find rides and travel with your colleagues',
                       style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                         color: Colors.white.withOpacity(0.9),
                       ),
@@ -198,7 +197,7 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
         Expanded(
           child: _buildStatCard(
             'Upcoming',
-            '${_dashboardData['upcoming_rides'] ?? 0}',
+            '${_dashboardData?['upcoming_rides'] ?? 0}',
             Icons.schedule,
             AppColors.primaryColor,
           ),
@@ -206,9 +205,9 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
         const SizedBox(width: 16),
         Expanded(
           child: _buildStatCard(
-            'Scheduled',
-            '${_dashboardData['scheduled_rides'] ?? 0}',
-            Icons.event,
+            'Pending',
+            '${_dashboardData?['scheduled_rides'] ?? 0}',
+            Icons.pending,
             AppColors.warningColor,
           ),
         ),
@@ -216,7 +215,7 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
         Expanded(
           child: _buildStatCard(
             'Completed',
-            '${_dashboardData['completed_rides'] ?? 0}',
+            '${_dashboardData?['completed_rides'] ?? 0}',
             Icons.check_circle,
             AppColors.successColor,
           ),
@@ -224,10 +223,10 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
         const SizedBox(width: 16),
         Expanded(
           child: _buildStatCard(
-            'Requests',
-            '${_pendingRequests.length}',
-            Icons.people,
-            AppColors.info,
+            'Cancelled',
+            '${_dashboardData?['cancelled_rides'] ?? 0}',
+            Icons.cancel,
+            AppColors.errorColor,
           ),
         ),
       ],
@@ -289,7 +288,7 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
         'Upcoming Rides',
         Icons.schedule,
         'No upcoming rides',
-        'Rides with confirmed passengers will appear here',
+        'Confirmed rides will appear here',
       );
     }
 
@@ -303,42 +302,22 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
     );
   }
 
-  Widget _buildScheduledRidesSection() {
+  Widget _buildScheduledRequestsSection() {
     if (_scheduledRides.isEmpty) {
       return _buildEmptySection(
         'Scheduled Rides',
-        Icons.event,
+        Icons.pending,
         'No scheduled rides',
-        'Create rides to get started',
+        'Rides you\'ve requested will appear here',
       );
     }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSectionHeader('Scheduled Rides', Icons.event, AppColors.warningColor),
+        _buildSectionHeader('Scheduled Rides', Icons.pending, AppColors.warningColor),
         const SizedBox(height: 16),
         ..._scheduledRides.map((ride) => _buildRideCard(ride, showActions: true)),
-      ],
-    );
-  }
-
-  Widget _buildPendingRequestsSection() {
-    if (_pendingRequests.isEmpty) {
-      return _buildEmptySection(
-        'Pending Requests',
-        Icons.people,
-        'No pending requests',
-        'Employee requests will appear here',
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSectionHeader('Pending Requests', Icons.people, AppColors.info),
-        const SizedBox(height: 16),
-        ..._pendingRequests.map((request) => _buildRequestCard(request)),
       ],
     );
   }
@@ -359,6 +338,26 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
         _buildSectionHeader('Completed Rides', Icons.check_circle, AppColors.successColor),
         const SizedBox(height: 16),
         ..._completedRides.map((ride) => _buildRideCard(ride, showActions: false)),
+      ],
+    );
+  }
+
+  Widget _buildCancelledRidesSection() {
+    if (_cancelledRides.isEmpty) {
+      return _buildEmptySection(
+        'Cancelled Rides',
+        Icons.cancel,
+        'No cancelled rides',
+        'Cancelled rides will appear here',
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader('Cancelled Rides', Icons.cancel, AppColors.errorColor),
+        const SizedBox(height: 16),
+        ..._cancelledRides.map((ride) => _buildCancelledRideCard(ride)),
       ],
     );
   }
@@ -455,7 +454,7 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${ride.confirmedPassengers}/${ride.vehicleCapacity} passengers confirmed',
+                      'Driver: ${ride.driverName ?? 'Unknown'}',
                       style: TextStyle(
                         fontSize: 14,
                         color: AppColors.textSecondaryColor,
@@ -505,64 +504,23 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
             ],
           ),
           
-          if (showActions) ...[
+          if (showActions && ride.isInProgress) ...[
             const SizedBox(height: 20),
-            Row(
-              children: [
-                if (ride.canStart) ...[
-                  // Can start ride
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () => _startRide(ride),
-                      icon: const Icon(Icons.play_arrow),
-                      label: const Text('Start Ride'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.successColor,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                    ),
-                  ),
-                ] else if (ride.isInProgress) ...[
-                  // Ride in progress - manage ride
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () => _navigateToActiveRide(ride),
-                      icon: const Icon(Icons.directions_car),
-                      label: const Text('Manage Ride'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.warningColor,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-                
-                const SizedBox(width: 12),
-                
-                // View requests button
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _navigateToRideRequests(ride),
-                    icon: const Icon(Icons.people),
-                    label: const Text('View Requests'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.primaryColor,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => _navigateToActiveRide(ride),
+                icon: const Icon(Icons.track_changes),
+                label: const Text('Track Ride'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.info,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
                   ),
                 ),
-              ],
+              ),
             ),
           ],
         ],
@@ -570,23 +528,23 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
     );
   }
 
-  Widget _buildRequestCard(RideRequest request) {
+  Widget _buildCancelledRideCard(Ride ride) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.primaryColor.withOpacity(0.3)),
+        border: Border.all(color: AppColors.errorColor.withOpacity(0.3)),
       ),
       child: Row(
         children: [
           CircleAvatar(
             radius: 20,
-            backgroundColor: AppColors.primaryColor.withOpacity(0.1),
+            backgroundColor: AppColors.errorColor.withOpacity(0.1),
             child: Icon(
-              Icons.person,
-              color: AppColors.primaryColor,
+              Icons.cancel,
+              color: AppColors.errorColor,
             ),
           ),
           const SizedBox(width: 16),
@@ -595,53 +553,38 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  request.userName ?? 'Unknown User',
+                  '${ride.pickupLocation} → ${ride.destination}',
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
                   ),
                 ),
-                if (request.message != null) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    request.message!,
-                    style: TextStyle(
-                      color: AppColors.textSecondaryColor,
-                      fontSize: 14,
-                    ),
+                const SizedBox(height: 4),
+                Text(
+                  'Driver: ${ride.driverName ?? 'Unknown'}',
+                  style: TextStyle(
+                    color: AppColors.textSecondaryColor,
+                    fontSize: 14,
                   ),
-                ],
+                ),
               ],
             ),
           ),
           const SizedBox(width: 16),
-          Column(
-            children: [
-              ElevatedButton(
-                onPressed: () => _acceptRequest(request.rideId, request.id),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.successColor,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                ),
-                child: const Text('Accept'),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: AppColors.errorColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              'Cancelled',
+              style: TextStyle(
+                color: AppColors.errorColor,
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
               ),
-              const SizedBox(height: 8),
-              OutlinedButton(
-                onPressed: () => _rejectRequest(request.rideId, request.id),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.errorColor,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                ),
-                child: const Text('Reject'),
-              ),
-            ],
+            ),
           ),
         ],
       ),
@@ -729,45 +672,6 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
   }
 
   // Action methods
-  Future<void> _startRide(Ride ride) async {
-    try {
-      await RideService.startRide(ride.id);
-      _showSuccessSnackBar('Ride started successfully!');
-      _loadDashboardData();
-    } catch (e) {
-      _showErrorSnackBar('Failed to start ride: ${e.toString()}');
-    }
-  }
-
-  Future<void> _acceptRequest(String rideId, String requestId) async {
-    try {
-      await RideService.acceptRideRequest(rideId, requestId);
-      _showSuccessSnackBar('Request accepted successfully!');
-      _loadDashboardData();
-    } catch (e) {
-      _showErrorSnackBar('Failed to accept request: ${e.toString()}');
-    }
-  }
-
-  Future<void> _rejectRequest(String rideId, String requestId) async {
-    try {
-      await RideService.rejectRideRequest(rideId, requestId);
-      _showSuccessSnackBar('Request rejected');
-      _loadDashboardData();
-    } catch (e) {
-      _showErrorSnackBar('Failed to reject request: ${e.toString()}');
-    }
-  }
-
-  void _navigateToRideRequests(Ride ride) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => RideRequestsScreen(ride: ride),
-      ),
-    ).then((_) => _loadDashboardData());
-  }
-
   void _navigateToActiveRide(Ride ride) {
     Navigator.push(
       context,
@@ -775,23 +679,5 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
         builder: (context) => ActiveRideScreen(ride: ride),
       ),
     ).then((_) => _loadDashboardData());
-  }
-
-  void _showSuccessSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: AppColors.successColor,
-      ),
-    );
-  }
-
-  void _showErrorSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: AppColors.errorColor,
-      ),
-    );
   }
 }
